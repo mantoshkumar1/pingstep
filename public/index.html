@@ -15,7 +15,7 @@
     </style>
   </head>
   <body>
-    <header><div><h1>PingStep</h1><p>Progress-aware monitoring for unattended scripts</p></div><span id="updated" class="notice">Loading…</span></header>
+    <header><div><h1>PingStep</h1><p>Progress-aware monitoring for unattended scripts</p></div><span id="updated" class="notice">Live refresh every 3 seconds</span></header>
     <main>
       <div class="summary" aria-label="Run summary"><div class="metric"><strong id="active-count">0</strong><span>Active</span></div><div class="metric"><strong id="stale-count">0</strong><span>Stale</span></div><div class="metric"><strong id="succeeded-count">0</strong><span>Succeeded</span></div><div class="metric"><strong id="failed-count">0</strong><span>Failed</span></div></div>
       <section><div class="section-head"><h2>Runs</h2><div><button id="active-filter" class="active">Active</button><button id="all-filter">All recent</button></div></div><div id="table-wrap"></div></section>
@@ -37,7 +37,7 @@
       }
       async function refresh() { try { const response = await fetch('/v1/runs', { cache:'no-store' }); if (!response.ok) throw new Error('Unable to load runs.'); state.runs = (await response.json()).runs; $('updated').textContent = `Updated ${new Date().toLocaleTimeString()}`; render(); } catch (error) { $('updated').textContent = error.message; } }
       async function showDetail(jobKey, runId) { const run = state.runs.find((item) => item.job_key === jobKey && item.run_id === runId); $('detail-title').textContent = jobKey; $('detail-status').innerHTML = `<span class="badge ${escapeHtml(run.status)}">${escapeHtml(run.status)}</span>`; $('detail-body').innerHTML = '<p class="notice">Loading event history…</p>'; $('detail').showModal(); try { const [eventResponse, etaResponse] = await Promise.all([fetch(`/v1/runs/${encodeURIComponent(jobKey)}/${encodeURIComponent(runId)}/events`), fetch(`/v1/runs/${encodeURIComponent(jobKey)}/${encodeURIComponent(runId)}/eta`)]); const events = (await eventResponse.json()).events; const eta = (await etaResponse.json()).eta; const etaSummary = eta ? `<p><strong>Estimated remaining:</strong> ${eta.remaining_seconds.lower}–${eta.remaining_seconds.upper} seconds <span class="notice">(${eta.confidence} confidence; ${eta.comparable_runs} comparable runs)</span></p>` : ''; $('detail-body').innerHTML = `<p class="notice mono">${escapeHtml(runId)}</p>${etaSummary}${events.map((event) => `<div class="event"><strong>${escapeHtml(event.type)}</strong><p>${date(event.received_at)} · sequence ${event.sequence}${event.data?.name ? ` · ${escapeHtml(event.data.name)}` : ''}${event.data?.message ? ` · ${escapeHtml(event.data.message)}` : ''}</p></div>`).join('') || '<p class="notice">No events found.</p>'}`; } catch { $('detail-body').innerHTML = '<p class="notice">Could not load event history.</p>'; } }
-      $('active-filter').addEventListener('click', () => { state.filter = 'active'; render(); }); $('all-filter').addEventListener('click', () => { state.filter = 'all'; render(); }); $('close-detail').addEventListener('click', () => $('detail').close()); refresh(); setInterval(refresh, 15000);
+      $('active-filter').addEventListener('click', () => { state.filter = 'active'; render(); }); $('all-filter').addEventListener('click', () => { state.filter = 'all'; render(); }); $('close-detail').addEventListener('click', () => $('detail').close()); refresh(); setInterval(refresh, 3000);
     </script>
   </body>
 </html>
