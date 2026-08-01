@@ -50,6 +50,17 @@ function livenessSettings(jobConfig = {}) {
   return { interval, grace };
 }
 
+function lateSettings(jobConfig = {}) {
+  if (jobConfig.expected_duration_seconds === undefined) return null;
+  const duration = jobConfig.expected_duration_seconds;
+  if (!Number.isFinite(duration) || duration <= 0) throw validationError('expected_duration_seconds must be positive.');
+  const grace = jobConfig.late_grace_seconds === undefined
+    ? Math.max(5 * 60, Math.ceil(duration * 0.2))
+    : jobConfig.late_grace_seconds;
+  if (!Number.isFinite(grace) || grace < 0) throw validationError('late_grace_seconds must be zero or positive.');
+  return { duration, grace };
+}
+
 export class PingStepService {
   constructor(store, { tokenHashesByJob = {}, jobConfigByKey = {}, now = () => new Date() } = {}) {
     this.store = store;
@@ -122,16 +133,24 @@ export class PingStepService {
     const latestStep = stateEntries.filter(({ event }) => event.type === 'step').at(-1);
     const terminalState = terminal ? terminal.event.type : 'running';
 
+    const previous = this.store.data.runs[key];
+    const late = lateSettings(this.jobConfigByKey[jobKey]);
     this.store.data.runs[key] = {
       job_key: jobKey,
       run_id: runId,
       status: terminalState,
       started_at: started.event.occurred_at,
+      started_received_at: started.received_at,
       received_at: latest.received_at,
       latest_sequence: latest.event.sequence,
       latest_event_type: latest.event.type,
       last_liveness_received_at: liveness?.received_at ?? started.received_at,
       liveness_deadline: terminal ? null : new Date(Date.parse(liveness?.received_at ?? started.received_at) + (settings.interval + settings.grace) * 1000).toISOString(),
+      late_deadline: terminal || !late ? null : new Date(Date.parse(started.received_at) + (late.duration + late.grace) * 1000).toISOString(),
+      is_late: terminal ? false : (previous?.is_late ?? false),
+      late_at: terminal ? null : (previous?.late_at ?? null),
+      late_transitions: previous?.late_transitions ?? 0,
+      stale_transitions: previous?.stale_transitions ?? 0,
       current_step: latestStep?.event.data?.name ?? null,
       terminal_event_id: terminal?.event.event_id ?? null,
       terminal_conflict: conflictingTerminal ? {
@@ -154,13 +173,44 @@ export class PingStepService {
 
   async reconcile() {
     const now = this.now();
+    let changed = false;
     this.expirePendingThrough(now);
     for (const run of Object.values(this.store.data.runs)) {
       if (run.status === 'running' && Date.parse(run.liveness_deadline) <= now.getTime()) {
         run.status = 'stale';
         run.stale_at = now.toISOString();
+        run.stale_transitions = (run.stale_transitions ?? 0) + 1;
+        this.queueAlert(run, 'stale', now);
+        changed = true;
+      }
+      if (run.status !== 'succeeded' && run.status !== 'failed' && !run.is_late && run.late_deadline && Date.parse(run.late_deadline) <= now.getTime()) {
+        run.is_late = true;
+        run.late_at = now.toISOString();
+        run.late_transitions = (run.late_transitions ?? 0) + 1;
+        this.queueAlert(run, 'late', now);
+        changed = true;
       }
     }
+    if (changed) await this.store.persist();
+    return changed;
+  }
+
+  queueAlert(run, type, now) {
+    const transition = type === 'stale' ? run.stale_transitions : run.late_transitions;
+    const id = `${runKey(run.job_key, run.run_id)}:${type}:${transition}`;
+    if (this.store.data.alerts[id]) return;
+    this.store.data.alerts[id] = {
+      id,
+      type,
+      job_key: run.job_key,
+      run_id: run.run_id,
+      status: run.status,
+      current_step: run.current_step,
+      message: type === 'stale' ? 'No heartbeat or step arrived before the liveness deadline.' : 'The run exceeded its configured expected duration.',
+      created_at: now.toISOString(),
+      delivery_status: 'pending',
+      attempts: 0
+    };
   }
 
   getRun(jobKey, runId) {
@@ -173,6 +223,10 @@ export class PingStepService {
 
   listRunEvents(jobKey, runId) {
     return this.allEventsForRun(jobKey, runId).map(({ event, received_at }) => ({ ...event, received_at }));
+  }
+
+  listAlerts() {
+    return Object.values(this.store.data.alerts).sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   }
 }
 

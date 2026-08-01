@@ -85,6 +85,8 @@ Each `started` event establishes a `liveness_deadline` using the job's configure
 
 These defaults are an operational assumption for the pilot, not a proven universal threshold. Record false-positive and late-detection feedback from every design partner before changing them.
 
+**Late-run decision:** a job becomes late only when it explicitly configures `expected_duration_seconds`. Its late deadline is the start receipt time plus that duration and a grace period; the default grace is the larger of five minutes or 20% of expected duration. Late is an additional condition (`is_late`), not a replacement for `running` or `stale`. This avoids presenting a late run as failed and permits separate, deduplicated late and stale alerts.
+
 - **Running:** received a valid `started` and no terminal event; liveness deadline has not passed.
 - **Stale:** running with no valid liveness event before the deadline. Send the pilot's one alert channel once per stale transition.
 - **Late:** running beyond an expected-duration threshold supported by configured expectations or comparable completed history. Late is an advisory state and must not be presented as a failure.

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { FileStore } from '../src/store.js';
 import { hashToken, PingStepService } from '../src/service.js';
+import { deliverPendingAlerts, WebhookAlertChannel } from '../src/alerts.js';
 
 async function setup({ now = new Date('2026-08-01T12:00:00Z') } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'pingstep-'));
@@ -61,11 +62,42 @@ test('does not revive a pending event after its 15-minute reconciliation window'
 });
 
 test('marks a quiet run stale after its deadline', async () => {
-  const { service, clock } = await setup();
+  const { store, service, clock } = await setup();
   await service.ingest(event(), 'test-token');
   clock.now = new Date('2026-08-01T12:15:00Z');
   await service.reconcile();
   assert.equal(service.getRun('nightly-export', 'run-1').status, 'stale');
+  assert.equal(Object.values(store.data.alerts)[0].type, 'stale');
+});
+
+test('marks a configured long-running job late and sends one webhook alert', async () => {
+  const { store, service, clock } = await setup();
+  service.jobConfigByKey['nightly-export'] = { expected_duration_seconds: 60, late_grace_seconds: 0 };
+  await service.ingest(event(), 'test-token');
+  clock.now = new Date('2026-08-01T12:01:00Z');
+  await service.reconcile();
+  const run = service.getRun('nightly-export', 'run-1');
+  assert.equal(run.status, 'running');
+  assert.equal(run.is_late, true);
+  const sent = [];
+  const channel = new WebhookAlertChannel({ url: 'https://alerts.example.test', fetchImpl: async (_url, options) => { sent.push(JSON.parse(options.body)); return { ok: true }; } });
+  await deliverPendingAlerts(store, channel, clock.now);
+  await deliverPendingAlerts(store, channel, clock.now);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].type, 'run.late');
+});
+
+test('retains a failed webhook alert for retry instead of dropping it', async () => {
+  const { store, service, clock } = await setup();
+  service.jobConfigByKey['nightly-export'] = { expected_duration_seconds: 60, late_grace_seconds: 0 };
+  await service.ingest(event(), 'test-token');
+  clock.now = new Date('2026-08-01T12:01:00Z');
+  await service.reconcile();
+  const channel = new WebhookAlertChannel({ url: 'https://alerts.example.test', fetchImpl: async () => ({ ok: false, status: 503 }) });
+  await deliverPendingAlerts(store, channel, clock.now);
+  const alert = Object.values(store.data.alerts)[0];
+  assert.equal(alert.delivery_status, 'failed');
+  assert.equal(alert.attempts, 1);
 });
 
 test('keeps the first terminal outcome and records an opposing conflict', async () => {

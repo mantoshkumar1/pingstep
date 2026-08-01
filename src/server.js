@@ -1,9 +1,9 @@
 import { createServer } from 'node:http';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { readFile } from 'node:fs/promises';
 import { FileStore } from './store.js';
 import { PingStepService } from './service.js';
+import { deliverPendingAlerts, WebhookAlertChannel } from './alerts.js';
 
 const port = Number(process.env.PORT ?? 3000);
 const databasePath = resolve(process.env.PINGSTEP_DATA_FILE ?? './data/pingstep.json');
@@ -17,7 +17,17 @@ const service = new PingStepService(store, {
   tokenHashesByJob: parseJsonEnv('PINGSTEP_JOB_TOKEN_HASHES_JSON'),
   jobConfigByKey: parseJsonEnv('PINGSTEP_JOB_CONFIG_JSON')
 });
+const alertChannel = new WebhookAlertChannel({
+  url: process.env.PINGSTEP_ALERT_WEBHOOK_URL,
+  token: process.env.PINGSTEP_ALERT_WEBHOOK_TOKEN
+});
+const evaluatorIntervalMs = Math.max(1000, Number(process.env.PINGSTEP_EVALUATOR_INTERVAL_MS ?? 60 * 1000));
 const dashboardHtml = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+
+async function evaluateRuns() {
+  await service.reconcile();
+  await deliverPendingAlerts(store, alertChannel);
+}
 
 const send = (response, status, body) => {
   response.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
@@ -33,6 +43,7 @@ const server = createServer(async (request, response) => {
     }
     if (request.method === 'GET' && url.pathname === '/health') return send(response, 200, { status: 'ok' });
     if (request.method === 'GET' && url.pathname === '/v1/runs') return send(response, 200, { runs: service.listRuns() });
+    if (request.method === 'GET' && url.pathname === '/v1/alerts') return send(response, 200, { alerts: service.listAlerts() });
     const runMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)$/);
     const eventMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)\/events$/);
     if (request.method === 'GET' && eventMatch) {
@@ -59,4 +70,7 @@ const server = createServer(async (request, response) => {
   }
 });
 
+const evaluator = setInterval(() => evaluateRuns().catch((error) => console.error('PingStep evaluator failed:', error.message)), evaluatorIntervalMs);
+evaluator.unref();
+await evaluateRuns();
 server.listen(port, () => console.log(`PingStep listening on http://localhost:${port}`));
