@@ -2,6 +2,10 @@
 
 Progress-aware monitoring for unattended 20–90 minute scripts running outside CI and workflow platforms.
 
+## Design partners
+
+We are recruiting engineers who personally own unattended 20–90 minute production scripts—such as backups, migrations, batch jobs, or report generators—running outside CI/workflow tools. See [the design-partner pilot issue](https://github.com/mantoshkumar1/pingstep/issues/9) to self-qualify. Please do not post credentials, logs, payloads, SQL, customer data, or secrets.
+
 ## Validation artifacts
 
 - [Pilot validation brief](./pilot-validation-brief.md)
