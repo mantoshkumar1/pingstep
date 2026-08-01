@@ -44,6 +44,20 @@ curl -X POST http://localhost:3000/v1/events \
 
 Open `http://localhost:3000/` for the dashboard. Use `GET /v1/runs` for the current recent-run projection, `GET /v1/runs/:job_key/:run_id` for a single run, or `GET /v1/runs/:job_key/:run_id/events` for its event history.
 
+### CLI helper
+
+Use the included helper to emit explicit events from a script. It does not infer stages or parse output.
+
+```sh
+export PINGSTEP_URL='http://localhost:3000'
+export PINGSTEP_TOKEN='your-job-token'
+RUN_ID=$(node bin/pingstep.js start --job billing-nightly-export | node -e 'process.stdin.on("data", d => console.log(JSON.parse(d).run_id))')
+node bin/pingstep.js step --job billing-nightly-export --run "$RUN_ID" --sequence 2 --name "exporting rows"
+node bin/pingstep.js succeeded --job billing-nightly-export --run "$RUN_ID" --sequence 3
+```
+
+Install the package globally or invoke `node bin/pingstep.js` directly. The helper prints the generated run ID from `start`; later events require that ID and an explicit increasing sequence.
+
 ### Stale, late, and alert behavior
 
 The evaluator runs every 60 seconds by default (`PINGSTEP_EVALUATOR_INTERVAL_MS`). A run becomes stale when it has no accepted heartbeat or step before its liveness deadline. Configure `expected_duration_seconds` for a job to enable late detection; the default late grace is the larger of five minutes or 20% of the expected duration, and it can be overridden with `late_grace_seconds`.

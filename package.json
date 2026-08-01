@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "pingstep": "bin/pingstep.js"
+  },
   "scripts": {
     "start": "node src/server.js",
     "test": "node --test",
