@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
-const emptyData = () => ({ events: {}, runs: {}, pending: {} });
+const emptyData = () => ({ events: {}, runs: {}, pending: {}, alerts: {} });
 
 export class FileStore {
   constructor(path) {
@@ -16,7 +16,8 @@ export class FileStore {
       this.data = {
         events: parsed.events ?? {},
         runs: parsed.runs ?? {},
-        pending: parsed.pending ?? {}
+        pending: parsed.pending ?? {},
+        alerts: parsed.alerts ?? {}
       };
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;

@@ -9,13 +9,15 @@ Progress-aware monitoring for unattended 20–90 minute scripts running outside 
 
 ## Event-ingestion service
 
-This initial service accepts explicit lifecycle events and durably derives a run's current state. It includes a read-only dashboard at `/` for active runs, recent-run history, and event detail. It intentionally covers only the event contract: idempotency, ordering, pending events, terminal conflicts, and stale-run state. It does not include alert delivery, a CLI helper, or ETA display.
+This initial service accepts explicit lifecycle events and durably derives a run's current state. It includes a read-only dashboard at `/` for active runs, recent-run history, and event detail. It detects stale runs and, when configured, late runs. A single outbound webhook is the pilot alert channel. It does not include a CLI helper or ETA display.
 
 ### Run locally
 
 ```sh
 export PINGSTEP_JOB_TOKEN_HASHES_JSON='{"billing-nightly-export":"<sha256 token hash>"}'
 export PINGSTEP_JOB_CONFIG_JSON='{"billing-nightly-export":{"expected_update_interval_seconds":300}}'
+export PINGSTEP_ALERT_WEBHOOK_URL='https://alerts.example.com/pingstep'
+export PINGSTEP_ALERT_WEBHOOK_TOKEN='optional-webhook-token'
 npm run hash-token -- your-secret-token
 npm start
 ```
@@ -40,6 +42,12 @@ curl -X POST http://localhost:3000/v1/events \
 ```
 
 Open `http://localhost:3000/` for the dashboard. Use `GET /v1/runs` for the current recent-run projection, `GET /v1/runs/:job_key/:run_id` for a single run, or `GET /v1/runs/:job_key/:run_id/events` for its event history.
+
+### Stale, late, and alert behavior
+
+The evaluator runs every 60 seconds by default (`PINGSTEP_EVALUATOR_INTERVAL_MS`). A run becomes stale when it has no accepted heartbeat or step before its liveness deadline. Configure `expected_duration_seconds` for a job to enable late detection; the default late grace is the larger of five minutes or 20% of the expected duration, and it can be overridden with `late_grace_seconds`.
+
+Each stale or late transition queues one webhook delivery. PingStep posts a small JSON payload containing the alert type, job key, run ID, status, current step, and message. Failed deliveries remain queued and retry no more than once per minute. `GET /v1/alerts` exposes delivery status for pilot support.
 
 ### Verify
 
