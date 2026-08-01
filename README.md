@@ -7,6 +7,7 @@ Progress-aware monitoring for unattended 20–90 minute scripts running outside 
 - [Pilot validation brief](./pilot-validation-brief.md)
 - [Event contract](./event-contract.md)
 - [Design-partner operations](./design-partner-ops.md)
+- [Output-pattern detection exploration](./output-pattern-exploration.md)
 
 ## Event-ingestion service
 
