@@ -64,6 +64,10 @@ The evaluator runs every 60 seconds by default (`PINGSTEP_EVALUATOR_INTERVAL_MS`
 
 Each stale or late transition queues one webhook delivery. PingStep posts a small JSON payload containing the alert type, job key, run ID, status, current step, and message. Failed deliveries remain queued and retry no more than once per minute. `GET /v1/alerts` exposes delivery status for pilot support.
 
+### ETA ranges
+
+PingStep exposes `GET /v1/runs/:job_key/:run_id/eta` only after a running job has a `job_version` and at least five comparable successful runs in the last 30 days. Comparable runs must have the same job key and version, with no stale transition or terminal conflict. The response is a remaining-time range based on the 25th–75th percentile of historical total durations: confidence is `low` for 5–9 runs and `medium` for 10 or more. Point estimates and high confidence are intentionally omitted.
+
 ### Verify
 
 ```sh
