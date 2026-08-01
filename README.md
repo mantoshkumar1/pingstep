@@ -30,6 +30,8 @@ It starts PingStep with temporary storage and a generated local token, opens a 6
 
 The dashboard updates automatically every three seconds; no browser refresh is required. The demo server stops after the synthetic run finishes, so use `npm start` instead if you want the dashboard to remain available afterward.
 
+On the dashboard, **Run status** is PingStep's lifecycle assessment (`running`, `stale`, `succeeded`, or `failed`). **Last reported stage** is the most recent named progress marker the job sent (for example, `Staging` or `Processing`). A job may be `running` before it has reported a named stage.
+
 Useful variations:
 
 ```sh

@@ -41,7 +41,7 @@ def main():
 
     run_id = str(uuid.uuid4())
     running_seconds = args.run_seconds - args.transition_seconds * 2
-    stages = [("started", "Queue", args.transition_seconds), ("step", "Staging", args.transition_seconds), ("step", "Running", running_seconds)]
+    stages = [("started", "Queue", args.transition_seconds), ("step", "Staging", args.transition_seconds), ("step", "Processing", running_seconds)]
     sequence = 0
     for event_type, state, delay in stages:
         sequence += 1
