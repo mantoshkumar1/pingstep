@@ -1,0 +1,11 @@
+{
+  "name": "pingstep",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test",
+    "hash-token": "node src/hash-token.js"
+  }
+}
