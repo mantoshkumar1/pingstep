@@ -110,6 +110,8 @@ python3 examples/simulate_statuses.py --job-key laptop-sim --run-seconds 60
 
 Use `--run-seconds 1200` for a 20-minute simulation, or `--outcome error` / `--outcome terminated` to exercise failure handling.
 
+Queue and Staging each remain visible for five seconds by default. Make them slower with `--transition-seconds 10`.
+
 ### Stale, late, and alert behavior
 
 The evaluator runs every 60 seconds by default (`PINGSTEP_EVALUATOR_INTERVAL_MS`). A run becomes stale when it has no accepted heartbeat or step before its liveness deadline. Configure `expected_duration_seconds` for a job to enable late detection; the default late grace is the larger of five minutes or 20% of the expected duration, and it can be overridden with `late_grace_seconds`.
