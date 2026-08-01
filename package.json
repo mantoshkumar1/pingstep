@@ -10,6 +10,7 @@
     "start": "node src/server.js",
     "test": "node --test",
     "hash-token": "node src/hash-token.js",
-    "pilot-scorecard": "node bin/pilot-scorecard.js"
+    "pilot-scorecard": "node bin/pilot-scorecard.js",
+    "demo": "sh bin/demo-local.sh"
   }
 }

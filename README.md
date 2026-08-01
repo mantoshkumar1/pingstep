@@ -18,6 +18,26 @@ We are recruiting engineers who personally own unattended 20–90 minute product
 
 This initial service accepts explicit lifecycle events and durably derives a run's current state. It includes a read-only dashboard at `/` for active runs, recent-run history, and event detail. It detects stale runs and, when configured, late runs. A single outbound webhook is the pilot alert channel. It does not include a CLI helper or ETA display.
 
+## Fast local test
+
+Run a complete local test with no external account, PACE job, or secrets:
+
+```sh
+npm run demo
+```
+
+It starts PingStep with temporary storage and a generated local token, opens a 60-second synthetic run (`Queue → Staging → Running → Complete`), then prints the final stored run state. While it runs, open the printed dashboard URL—normally `http://localhost:3000/`—to watch the state transitions.
+
+Useful variations:
+
+```sh
+PINGSTEP_DEMO_RUN_SECONDS=20 npm run demo  # quicker smoke test
+PINGSTEP_DEMO_RUN_SECONDS=1200 npm run demo  # 20-minute test
+PINGSTEP_DEMO_PORT=3010 npm run demo
+```
+
+This is a functional test only. It does not count as a real-job pilot integration.
+
 ### Run locally
 
 ```sh
