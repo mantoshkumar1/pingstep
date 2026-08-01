@@ -1,0 +1,49 @@
+import { createServer } from 'node:http';
+import { mkdir } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { FileStore } from './store.js';
+import { PingStepService } from './service.js';
+
+const port = Number(process.env.PORT ?? 3000);
+const databasePath = resolve(process.env.PINGSTEP_DATA_FILE ?? './data/pingstep.json');
+const parseJsonEnv = (name) => {
+  try { return JSON.parse(process.env[name] ?? '{}'); } catch { throw new Error(`${name} must contain valid JSON.`); }
+};
+const store = new FileStore(databasePath);
+await mkdir(dirname(databasePath), { recursive: true });
+await store.load();
+const service = new PingStepService(store, {
+  tokenHashesByJob: parseJsonEnv('PINGSTEP_JOB_TOKEN_HASHES_JSON'),
+  jobConfigByKey: parseJsonEnv('PINGSTEP_JOB_CONFIG_JSON')
+});
+
+const send = (response, status, body) => {
+  response.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
+  response.end(`${JSON.stringify(body)}\n`);
+};
+
+const server = createServer(async (request, response) => {
+  try {
+    const url = new URL(request.url, `http://${request.headers.host}`);
+    if (request.method === 'GET' && url.pathname === '/health') return send(response, 200, { status: 'ok' });
+    if (request.method === 'GET' && url.pathname === '/v1/runs') return send(response, 200, { runs: service.listRuns() });
+    const runMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)$/);
+    if (request.method === 'GET' && runMatch) {
+      const run = service.getRun(decodeURIComponent(runMatch[1]), decodeURIComponent(runMatch[2]));
+      return run ? send(response, 200, { run }) : send(response, 404, { error: 'Run not found.' });
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/events') {
+      let raw = '';
+      for await (const chunk of request) raw += chunk;
+      const token = request.headers.authorization?.replace(/^Bearer\s+/i, '');
+      const result = await service.ingest(JSON.parse(raw), token);
+      return send(response, result.duplicate ? 200 : 202, result);
+    }
+    return send(response, 404, { error: 'Not found.' });
+  } catch (error) {
+    const status = error.code === 'UNAUTHORIZED' ? 401 : error.code === 'CONFLICT' ? 409 : error.code === 'VALIDATION_ERROR' || error instanceof SyntaxError ? 400 : 500;
+    return send(response, status, { error: error.message });
+  }
+});
+
+server.listen(port, () => console.log(`PingStep listening on http://localhost:${port}`));
