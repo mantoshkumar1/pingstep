@@ -8,6 +8,7 @@ Progress-aware monitoring for unattended 20–90 minute scripts running outside 
 - [Event contract](./event-contract.md)
 - [Design-partner operations](./design-partner-ops.md)
 - [Output-pattern detection exploration](./output-pattern-exploration.md)
+- [Pilot evidence template](./pilot-evidence.example.json)
 
 ## Event-ingestion service
 
@@ -68,6 +69,16 @@ Each stale or late transition queues one webhook delivery. PingStep posts a smal
 ### ETA ranges
 
 PingStep exposes `GET /v1/runs/:job_key/:run_id/eta` only after a running job has a `job_version` and at least five comparable successful runs in the last 30 days. Comparable runs must have the same job key and version, with no stale transition or terminal conflict. The response is a remaining-time range based on the 25th–75th percentile of historical total durations: confidence is `low` for 5–9 runs and `medium` for 10 or more. Point estimates and high confidence are intentionally omitted.
+
+### Pilot decision scorecard
+
+Copy `pilot-evidence.example.json` outside version control, record evidence using partner aliases only, then run:
+
+```sh
+npm run pilot-scorecard -- /path/to/pilot-evidence.json
+```
+
+The scorecard returns `proceed` only for five qualified conversations, three real-job integrations, and two explicit paid-pilot or switching commitments. Before the assessment window closes, it returns `collecting_evidence`; after it closes without all thresholds, it returns `stop_or_reposition`.
 
 ### Verify
 
