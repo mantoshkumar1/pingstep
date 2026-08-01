@@ -76,6 +76,18 @@ python3 examples/pace_adapter.py --pace-job-id '<job-id>' --job-key pace-integra
 
 Use only a non-sensitive test job. The adapter sends no Jenkins logs or PACE output to PingStep; it sends only the recognized state transition. A deliberately shortened 20-minute PACE run is valid technical-integration evidence, but does not change the pilot’s normal 20–90 minute target-user screen if the real workload normally runs longer.
 
+### Local status simulator
+
+Use this when no real job is available. It automatically emits `Queue → Staging → Running → Complete` from this laptop. This is a functional test only, not pilot-integration evidence.
+
+```sh
+export PINGSTEP_URL='http://localhost:3000'
+export PINGSTEP_TOKEN='your-job-token'
+python3 examples/simulate_statuses.py --job-key laptop-sim --run-seconds 60
+```
+
+Use `--run-seconds 1200` for a 20-minute simulation, or `--outcome error` / `--outcome terminated` to exercise failure handling.
+
 ### Stale, late, and alert behavior
 
 The evaluator runs every 60 seconds by default (`PINGSTEP_EVALUATOR_INTERVAL_MS`). A run becomes stale when it has no accepted heartbeat or step before its liveness deadline. Configure `expected_duration_seconds` for a job to enable late detection; the default late grace is the larger of five minutes or 20% of the expected duration, and it can be overridden with `late_grace_seconds`.
