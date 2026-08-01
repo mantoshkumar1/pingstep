@@ -9,7 +9,7 @@ Progress-aware monitoring for unattended 20–90 minute scripts running outside 
 
 ## Event-ingestion service
 
-This initial service accepts explicit lifecycle events and durably derives a run's current state. It intentionally covers only the event contract: idempotency, ordering, pending events, terminal conflicts, and stale-run state. It does not include a dashboard, alert delivery, CLI helper, or ETA display.
+This initial service accepts explicit lifecycle events and durably derives a run's current state. It includes a read-only dashboard at `/` for active runs, recent-run history, and event detail. It intentionally covers only the event contract: idempotency, ordering, pending events, terminal conflicts, and stale-run state. It does not include alert delivery, a CLI helper, or ETA display.
 
 ### Run locally
 
@@ -39,7 +39,7 @@ curl -X POST http://localhost:3000/v1/events \
   }'
 ```
 
-Use `GET /v1/runs` for the current recent-run projection or `GET /v1/runs/:job_key/:run_id` for a single run.
+Open `http://localhost:3000/` for the dashboard. Use `GET /v1/runs` for the current recent-run projection, `GET /v1/runs/:job_key/:run_id` for a single run, or `GET /v1/runs/:job_key/:run_id/events` for its event history.
 
 ### Verify
 

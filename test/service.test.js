@@ -79,3 +79,12 @@ test('keeps the first terminal outcome and records an opposing conflict', async 
   assert.equal(run.status, 'failed');
   assert.equal(run.terminal_conflict.type, 'succeeded');
 });
+
+test('returns durable event history in sequence order for a dashboard detail view', async () => {
+  const { service } = await setup();
+  await service.ingest(event(), 'test-token');
+  await service.ingest(event({ event_id: 'event-2', sequence: 2, type: 'step', data: { name: 'exporting' } }), 'test-token');
+  const events = service.listRunEvents('nightly-export', 'run-1');
+  assert.deepEqual(events.map((item) => item.type), ['started', 'step']);
+  assert.ok(events.every((item) => item.received_at));
+});
