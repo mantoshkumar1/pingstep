@@ -28,6 +28,8 @@ npm run demo
 
 It starts PingStep with temporary storage and a generated local token, opens a 60-second synthetic run (`Queue → Staging → Running → Complete`), then prints the final stored run state. While it runs, open the printed dashboard URL—normally `http://localhost:3000/`—to watch the state transitions.
 
+The dashboard updates automatically every three seconds; no browser refresh is required. The demo server stops after the synthetic run finishes, so use `npm start` instead if you want the dashboard to remain available afterward.
+
 Useful variations:
 
 ```sh
