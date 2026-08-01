@@ -1,0 +1,31 @@
+{
+  "assessment_window_complete": false,
+  "conversations": [
+    {
+      "partner_alias": "DP-01",
+      "date": "",
+      "qualified": false,
+      "recent_real_job": "",
+      "evidence_note": ""
+    }
+  ],
+  "integrations": [
+    {
+      "partner_alias": "DP-01",
+      "date": "",
+      "real_job": false,
+      "observed_run_id": "",
+      "evidence_note": ""
+    }
+  ],
+  "commitments": [
+    {
+      "partner_alias": "DP-01",
+      "date": "",
+      "type": "paid_pilot",
+      "explicit": false,
+      "alternative": "",
+      "evidence_note": ""
+    }
+  ]
+}
