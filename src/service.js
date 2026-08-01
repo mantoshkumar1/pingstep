@@ -170,6 +170,10 @@ export class PingStepService {
   listRuns() {
     return Object.values(this.store.data.runs).sort((a, b) => Date.parse(b.received_at) - Date.parse(a.received_at));
   }
+
+  listRunEvents(jobKey, runId) {
+    return this.allEventsForRun(jobKey, runId).map(({ event, received_at }) => ({ ...event, received_at }));
+  }
 }
 
 export const createEventId = () => randomUUID();

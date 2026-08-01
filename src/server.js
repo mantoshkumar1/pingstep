@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { FileStore } from './store.js';
 import { PingStepService } from './service.js';
 
@@ -16,6 +17,7 @@ const service = new PingStepService(store, {
   tokenHashesByJob: parseJsonEnv('PINGSTEP_JOB_TOKEN_HASHES_JSON'),
   jobConfigByKey: parseJsonEnv('PINGSTEP_JOB_CONFIG_JSON')
 });
+const dashboardHtml = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 
 const send = (response, status, body) => {
   response.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
@@ -25,9 +27,20 @@ const send = (response, status, body) => {
 const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host}`);
+    if (request.method === 'GET' && url.pathname === '/') {
+      response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      return response.end(dashboardHtml);
+    }
     if (request.method === 'GET' && url.pathname === '/health') return send(response, 200, { status: 'ok' });
     if (request.method === 'GET' && url.pathname === '/v1/runs') return send(response, 200, { runs: service.listRuns() });
     const runMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)$/);
+    const eventMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)\/events$/);
+    if (request.method === 'GET' && eventMatch) {
+      const jobKey = decodeURIComponent(eventMatch[1]);
+      const runId = decodeURIComponent(eventMatch[2]);
+      if (!service.getRun(jobKey, runId)) return send(response, 404, { error: 'Run not found.' });
+      return send(response, 200, { events: service.listRunEvents(jobKey, runId) });
+    }
     if (request.method === 'GET' && runMatch) {
       const run = service.getRun(decodeURIComponent(runMatch[1]), decodeURIComponent(runMatch[2]));
       return run ? send(response, 200, { run }) : send(response, 404, { error: 'Run not found.' });
