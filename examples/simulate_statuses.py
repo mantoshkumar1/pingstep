@@ -55,7 +55,8 @@ def main():
 
     sequence += 1
     terminal_type = "succeeded" if args.outcome == "complete" else "failed"
-    data = {} if terminal_type == "succeeded" else {"message": f"Synthetic run entered {args.outcome.title()}."}
+    data = {"stage": args.outcome.title()}
+    if terminal_type == "failed": data["message"] = f"Synthetic run entered {args.outcome.title()}."
     post_event(base_url, token, {
         "event_id": str(uuid.uuid4()), "job_key": args.job_key, "run_id": run_id,
         "sequence": sequence, "type": terminal_type, "occurred_at": timestamp(), "data": data,

@@ -160,7 +160,7 @@ export class PingStepService {
       late_transitions: previous?.late_transitions ?? 0,
       stale_transitions: previous?.stale_transitions ?? 0,
       job_version: started.event.data?.job_version ?? null,
-      current_step: latestStep?.event.data?.name ?? null,
+      current_step: terminal?.event.data?.stage ?? latestStep?.event.data?.name ?? null,
       terminal_event_id: terminal?.event.event_id ?? null,
       terminal_conflict: conflictingTerminal ? {
         event_id: conflictingTerminal.event.event_id,

@@ -56,7 +56,8 @@ def main():
             sequence += 1
             event_type = "started" if previous is None else TERMINAL.get(state, "step")
             data = {"name": state.lower()} if event_type == "step" else {}
-            if event_type == "failed": data = {"message": f"PACE job entered {state}."}
+            if event_type == "succeeded": data = {"stage": state}
+            if event_type == "failed": data = {"stage": state, "message": f"PACE job entered {state}."}
             send(url, token, {"event_id": str(uuid.uuid4()), "job_key": args.job_key, "run_id": run_id, "sequence": sequence, "type": event_type, "occurred_at": now(), "data": data})
             print(f"{now()} {state} -> {event_type}", flush=True)
             previous = state
