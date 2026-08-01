@@ -5,6 +5,7 @@ const TERMINAL_TYPES = new Set(['succeeded', 'failed']);
 const DEFAULT_INTERVAL_SECONDS = 5 * 60;
 const DEFAULT_GRACE_SECONDS = 10 * 60;
 const PENDING_WINDOW_MS = 15 * 60 * 1000;
+const ETA_HISTORY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 const runKey = (jobKey, runId) => `${jobKey}:${runId}`;
 const fingerprint = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -59,6 +60,13 @@ function lateSettings(jobConfig = {}) {
     : jobConfig.late_grace_seconds;
   if (!Number.isFinite(grace) || grace < 0) throw validationError('late_grace_seconds must be zero or positive.');
   return { duration, grace };
+}
+
+function percentile(values, fraction) {
+  const index = (values.length - 1) * fraction;
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  return values[lower] + (values[upper] - values[lower]) * (index - lower);
 }
 
 export class PingStepService {
@@ -151,6 +159,7 @@ export class PingStepService {
       late_at: terminal ? null : (previous?.late_at ?? null),
       late_transitions: previous?.late_transitions ?? 0,
       stale_transitions: previous?.stale_transitions ?? 0,
+      job_version: started.event.data?.job_version ?? null,
       current_step: latestStep?.event.data?.name ?? null,
       terminal_event_id: terminal?.event.event_id ?? null,
       terminal_conflict: conflictingTerminal ? {
@@ -227,6 +236,36 @@ export class PingStepService {
 
   listAlerts() {
     return Object.values(this.store.data.alerts).sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  }
+
+  getEta(jobKey, runId) {
+    const run = this.getRun(jobKey, runId);
+    if (!run || run.status === 'succeeded' || run.status === 'failed' || !run.job_version) return null;
+    const cutoff = this.now().getTime() - ETA_HISTORY_WINDOW_MS;
+    const comparable = Object.values(this.store.data.runs)
+      .filter((candidate) => candidate.job_key === jobKey
+        && candidate.run_id !== runId
+        && candidate.status === 'succeeded'
+        && candidate.job_version === run.job_version
+        && candidate.stale_transitions === 0
+        && !candidate.terminal_conflict
+        && Date.parse(candidate.received_at) >= cutoff)
+      .map((candidate) => Date.parse(candidate.received_at) - Date.parse(candidate.started_received_at))
+      .filter((duration) => duration >= 0)
+      .sort((a, b) => a - b);
+    if (comparable.length < 5) return null;
+    const elapsed = Math.max(0, this.now().getTime() - Date.parse(run.started_received_at));
+    const lowerDuration = percentile(comparable, 0.25);
+    const upperDuration = percentile(comparable, 0.75);
+    return {
+      job_version: run.job_version,
+      comparable_runs: comparable.length,
+      confidence: comparable.length >= 10 ? 'medium' : 'low',
+      remaining_seconds: {
+        lower: Math.max(0, Math.round((lowerDuration - elapsed) / 1000)),
+        upper: Math.max(0, Math.round((upperDuration - elapsed) / 1000))
+      }
+    };
   }
 }
 

@@ -46,6 +46,13 @@ const server = createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/v1/alerts') return send(response, 200, { alerts: service.listAlerts() });
     const runMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)$/);
     const eventMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)\/events$/);
+    const etaMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)\/eta$/);
+    if (request.method === 'GET' && etaMatch) {
+      const jobKey = decodeURIComponent(etaMatch[1]);
+      const runId = decodeURIComponent(etaMatch[2]);
+      if (!service.getRun(jobKey, runId)) return send(response, 404, { error: 'Run not found.' });
+      return send(response, 200, { eta: service.getEta(jobKey, runId) });
+    }
     if (request.method === 'GET' && eventMatch) {
       const jobKey = decodeURIComponent(eventMatch[1]);
       const runId = decodeURIComponent(eventMatch[2]);

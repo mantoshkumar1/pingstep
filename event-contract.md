@@ -130,7 +130,7 @@ ETA remains disabled unless all of these conditions hold:
 4. Show an ETA **range**, calculated from the 25th–75th percentile of comparable total durations, not a point estimate.
 5. Label confidence **low** for 5–9 comparable runs and **medium** for 10 or more. The pilot does not display “high” confidence.
 
-`job_version` is therefore optional for ordinary lifecycle events but required in `started.data` before a job can become ETA-eligible. This protects the pilot from presenting a misleading forecast after a material script change.
+`job_version` is therefore optional for ordinary lifecycle events but required in `started.data` before a job can become ETA-eligible. This protects the pilot from presenting a misleading forecast after a material script change. The pilot computes a remaining-time range from the 25th–75th percentile of comparable total durations; confidence is low for 5–9 runs and medium for 10 or more.
 
 ## Implementation handoff
 

@@ -18,7 +18,8 @@ Options:
   --current <n>      Optional step counter
   --total <n>        Optional step total
   --unit <text>      Optional counter unit
-  --expected-duration <seconds>  Optional start metadata`;
+  --expected-duration <seconds>  Optional start metadata
+  --job-version <version>        Optional start metadata for ETA comparison`;
 
 function fail(message) {
   console.error(`Error: ${message}\n\n${usage}`);
@@ -71,6 +72,7 @@ async function main() {
   for (const key of ['current', 'total', 'expected-duration']) {
     if (options[key] !== undefined) data[key === 'expected-duration' ? 'expected_duration_seconds' : key] = numberOption(options[key], `--${key}`);
   }
+  if (options['job-version']) data.job_version = options['job-version'];
   if (options.unit) data.unit = options.unit;
 
   const type = command === 'start' ? 'started' : command;

@@ -120,3 +120,26 @@ test('returns durable event history in sequence order for a dashboard detail vie
   assert.deepEqual(events.map((item) => item.type), ['started', 'step']);
   assert.ok(events.every((item) => item.received_at));
 });
+
+test('calculates an ETA range only from five recent comparable successful runs', async () => {
+  const { service, clock } = await setup();
+  const base = Date.parse('2026-08-01T12:00:00Z');
+  for (const [index, duration] of [100, 110, 120, 130, 140].entries()) {
+    clock.now = new Date(base + index * 200_000);
+    await service.ingest(event({ event_id: `start-${index}`, run_id: `history-${index}`, data: { job_version: 'v1' } }), 'test-token');
+    clock.now = new Date(base + index * 200_000 + duration * 1000);
+    await service.ingest(event({ event_id: `finish-${index}`, run_id: `history-${index}`, sequence: 2, type: 'succeeded', data: {} }), 'test-token');
+  }
+  clock.now = new Date(base + 1_100_000);
+  await service.ingest(event({ event_id: 'current-start', run_id: 'current', data: { job_version: 'v1' } }), 'test-token');
+  clock.now = new Date(base + 1_120_000);
+  assert.deepEqual(service.getEta('nightly-export', 'current'), {
+    job_version: 'v1', comparable_runs: 5, confidence: 'low', remaining_seconds: { lower: 90, upper: 110 }
+  });
+});
+
+test('does not calculate an ETA without a job version and five comparable successes', async () => {
+  const { service } = await setup();
+  await service.ingest(event(), 'test-token');
+  assert.equal(service.getEta('nightly-export', 'run-1'), null);
+});
