@@ -112,6 +112,14 @@ test('keeps the first terminal outcome and records an opposing conflict', async 
   assert.equal(run.terminal_conflict.type, 'succeeded');
 });
 
+test('shows a terminal stage instead of the previous working stage', async () => {
+  const { service } = await setup();
+  await service.ingest(event(), 'test-token');
+  await service.ingest(event({ event_id: 'event-2', sequence: 2, type: 'step', data: { name: 'processing' } }), 'test-token');
+  await service.ingest(event({ event_id: 'event-3', sequence: 3, type: 'succeeded', data: { stage: 'Complete' } }), 'test-token');
+  assert.equal(service.getRun('nightly-export', 'run-1').current_step, 'Complete');
+});
+
 test('returns durable event history in sequence order for a dashboard detail view', async () => {
   const { service } = await setup();
   await service.ingest(event(), 'test-token');
