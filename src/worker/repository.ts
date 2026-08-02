@@ -113,6 +113,12 @@ export class PingStepD1Repository {
     return result.results;
   }
 
+  async countJobsForOwner(userId: string): Promise<number> {
+    const result = await this.db.prepare('SELECT COUNT(*) AS count FROM jobs WHERE owner_user_id = ?')
+      .bind(userId).first<{ count: number }>();
+    return result?.count ?? 0;
+  }
+
   async createJob(job: StoredJob, now: string): Promise<void> {
     await this.db.prepare(`
       INSERT INTO jobs (
