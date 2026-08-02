@@ -1,4 +1,5 @@
 import { PingStepD1Repository, type RunProjection, type StoredEvent } from './repository';
+import { policyFor, rollingWindowStart } from './plans';
 
 const EVENT_TYPES = new Set(['started', 'step', 'heartbeat', 'succeeded', 'failed', 'cancelled']);
 const TERMINAL_TYPES = new Set(['succeeded', 'failed', 'cancelled']);
@@ -79,6 +80,13 @@ export class HostedPingStepService {
     }
 
     const receivedAt = this.now().toISOString();
+    if (event.type === 'started' && job.owner_user_id && !await this.repository.getRun(event.job_key, event.run_id)) {
+      const policy = policyFor((await this.repository.getAccountPlan(job.owner_user_id, receivedAt)).plan);
+      const runsUsed = await this.repository.countRunsForOwnerSince(job.owner_user_id, rollingWindowStart(this.now()));
+      if (runsUsed >= policy.maxRunsPer30Days) {
+        throw new HttpError(402, `Your ${policy.label} plan includes ${policy.maxRunsPer30Days.toLocaleString()} runs in 30 days. Upgrade at https://pingstep.dev/pricing.html to start another run.`);
+      }
+    }
     await this.repository.insertEvent({ ...event, received_at: receivedAt, data_json: JSON.stringify(event.data ?? {}), fingerprint: eventFingerprint });
     if (event.type === 'started') await this.repository.clearPendingForRun(event.job_key, event.run_id);
     else if (!await this.repository.getRun(event.job_key, event.run_id)) await this.repository.markPending(event.event_id, new Date(this.now().getTime() + PENDING_WINDOW_MS).toISOString());

@@ -6,6 +6,7 @@ import { requireOperator, requireReadAccess } from './worker/auth';
 import { provisionJob } from './worker/operator';
 import { deliverPendingAlerts } from './worker/alerts';
 import { completeOAuth, currentAccount, requireAccount, requireSameOrigin, signOut, startOAuth } from './worker/accounts';
+import { policyFor, rollingWindowStart, type PlanCode } from './worker/plans';
 
 const json = (body: unknown, status = 200, headers: HeadersInit = {}) => Response.json(body, {
   status,
@@ -22,6 +23,19 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   }
   if (request.method === 'GET' && url.pathname === '/v1/auth/me') {
     return json({ user: await currentAccount(request, new PingStepD1Repository(env.DB)) });
+  }
+  if (request.method === 'GET' && url.pathname === '/v1/account/usage') {
+    const repository = new PingStepD1Repository(env.DB);
+    const account = await requireAccount(request, repository);
+    const policy = policyFor((await repository.getAccountPlan(account.id, new Date().toISOString())).plan);
+    return json({
+      plan: policy.code,
+      plan_label: policy.label,
+      jobs_used: await repository.countJobsForOwner(account.id),
+      jobs_limit: policy.maxJobs,
+      runs_used: await repository.countRunsForOwnerSince(account.id, rollingWindowStart()),
+      runs_limit: policy.maxRunsPer30Days
+    });
   }
   const oauthStartMatch = url.pathname.match(/^\/v1\/auth\/(github|google)$/);
   if (request.method === 'GET' && oauthStartMatch) return startOAuth(request, env, new PingStepD1Repository(env.DB), oauthStartMatch[1]);
@@ -61,6 +75,18 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   if (request.method === 'POST' && url.pathname === '/v1/operator/jobs') {
     await requireOperator(request, env);
     return json(await provisionJob(new PingStepD1Repository(env.DB), await request.json()), 201);
+  }
+  const accountPlanMatch = url.pathname.match(/^\/v1\/operator\/accounts\/([^/]+)\/plan$/);
+  if (request.method === 'POST' && accountPlanMatch) {
+    await requireOperator(request, env);
+    const body = await request.json() as { plan?: unknown; active_until?: unknown };
+    if (body.plan !== 'trial' && body.plan !== 'pro' && body.plan !== 'team') throw new HttpError(400, 'plan must be trial, pro, or team.');
+    if (body.active_until !== null && body.active_until !== undefined && (typeof body.active_until !== 'string' || Number.isNaN(Date.parse(body.active_until)))) {
+      throw new HttpError(400, 'active_until must be an RFC 3339 timestamp or null.');
+    }
+    const repository = new PingStepD1Repository(env.DB);
+    await repository.setAccountPlan(decodeURIComponent(accountPlanMatch[1]), body.plan as PlanCode, body.active_until ?? null, new Date().toISOString());
+    return json({ ok: true });
   }
   if (request.method === 'POST' && url.pathname === '/v1/jobs') {
     requireSameOrigin(request);

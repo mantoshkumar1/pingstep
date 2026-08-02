@@ -30,6 +30,11 @@ export type OAuthIdentityUser = {
   email: string;
 };
 
+export type AccountPlan = {
+  plan: 'trial' | 'pro' | 'team';
+  active_until: string | null;
+};
+
 export type StoredEvent = {
   event_id: string;
   job_key: string;
@@ -117,6 +122,24 @@ export class PingStepD1Repository {
     const result = await this.db.prepare('SELECT COUNT(*) AS count FROM jobs WHERE owner_user_id = ?')
       .bind(userId).first<{ count: number }>();
     return result?.count ?? 0;
+  }
+
+  async countRunsForOwnerSince(userId: string, since: string): Promise<number> {
+    const result = await this.db.prepare('SELECT COUNT(*) AS count FROM runs r INNER JOIN jobs j ON j.job_key = r.job_key WHERE j.owner_user_id = ? AND r.started_received_at >= ?')
+      .bind(userId, since).first<{ count: number }>();
+    return result?.count ?? 0;
+  }
+
+  async getAccountPlan(userId: string, now: string): Promise<AccountPlan> {
+    const plan = await this.db.prepare('SELECT plan, active_until FROM account_plans WHERE user_id = ?')
+      .bind(userId).first<AccountPlan>();
+    if (!plan || (plan.active_until && plan.active_until <= now)) return { plan: 'trial', active_until: null };
+    return plan;
+  }
+
+  async setAccountPlan(userId: string, plan: AccountPlan['plan'], activeUntil: string | null, now: string): Promise<void> {
+    await this.db.prepare('INSERT INTO account_plans (user_id, plan, active_until, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET plan = excluded.plan, active_until = excluded.active_until, updated_at = excluded.updated_at')
+      .bind(userId, plan, activeUntil, now, now).run();
   }
 
   async createJob(job: StoredJob, now: string): Promise<void> {

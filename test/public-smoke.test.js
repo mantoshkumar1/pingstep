@@ -40,3 +40,12 @@ test('status and launch discovery assets are present', async () => {
   assert.match(locale, /PINGSTEP_LOCALES/);
   assert.match(llms, /not proof of failure/);
 });
+
+test('pricing keeps the trial small and the paid plans explicit', async () => {
+  const pricing = await publicFile('pricing.html');
+  assert.match(pricing, /2 jobs/);
+  assert.match(pricing, /10 runs in a rolling 30 days/);
+  assert.match(pricing, /US\$12/);
+  assert.match(pricing, /US\$39/);
+  assert.match(pricing, /Automated card checkout is not live yet/);
+});
