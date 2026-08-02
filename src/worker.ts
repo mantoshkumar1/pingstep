@@ -37,6 +37,9 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   if (request.method === 'GET' && url.pathname === '/app') {
     return env.ASSETS.fetch(new Request(new URL('/workspace.html', request.url), request));
   }
+  if (request.method === 'GET' && url.pathname === '/status') {
+    return env.ASSETS.fetch(new Request(new URL('/status.html', request.url), request));
+  }
   if (request.method === 'GET' && url.pathname === '/v1/runs') {
     const repository = new PingStepD1Repository(env.DB);
     const account = await currentAccount(request, repository);

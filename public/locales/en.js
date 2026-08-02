@@ -1,0 +1,1 @@
+window.PINGSTEP_LOCALES={en:{languageName:"English",nav:{dashboard:"Open dashboard"},landing:{title:"See where your job is.",cta:"Monitor a job"},workspace:{firstRun:"Your first run in four steps",copyToken:"Copy token"}};

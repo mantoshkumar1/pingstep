@@ -1,10 +1,10 @@
 # PingStep
 
-Progress-aware monitoring for unattended 20–90 minute scripts running outside CI and workflow platforms.
+Progress-aware monitoring that shows the last stage a long-running job reached and makes lost visibility clear.
 
-## Design partners
+Use the hosted dashboard at [pingstep.dev/app](https://pingstep.dev/app). Public guides are available at [Docs](https://pingstep.dev/docs.html), [Security](https://pingstep.dev/security.html), [Privacy](https://pingstep.dev/privacy.html), and [Status](https://pingstep.dev/status).
 
-We are recruiting engineers who personally own unattended 20–90 minute production scripts—such as backups, migrations, batch jobs, or report generators—running outside CI/workflow tools. See [the design-partner pilot issue](https://github.com/mantoshkumar1/pingstep/issues/9) to self-qualify. Please do not post credentials, logs, payloads, SQL, customer data, or secrets.
+Please do not post credentials, logs, payloads, SQL, customer data, or secrets.
 
 ## Validation artifacts
 
@@ -16,7 +16,7 @@ We are recruiting engineers who personally own unattended 20–90 minute product
 
 ## Event-ingestion service
 
-This initial service accepts explicit lifecycle events and durably derives a run's current state. It includes a read-only dashboard at `/` for active runs, recent-run history, and event detail. It detects stale runs and, when configured, late runs. A single outbound webhook is the pilot alert channel. It does not include a CLI helper or ETA display.
+PingStep accepts explicit lifecycle events and durably derives a run's current state. The hosted dashboard lives at `/app`; it detects stale runs and, when configured, late runs. A single outbound webhook is available when an alert destination is configured.
 
 ## Fast local test
 
@@ -114,7 +114,7 @@ python3 examples/customer_status_adapter.py --customer-job-id '<job-id>' --job-k
 
 For the hosted service, set `PINGSTEP_URL='https://pingstep.dev'`. Create the job and obtain its one-time job token through the protected operator dashboard at `https://pingstep.dev/app`; use that token as `PINGSTEP_TOKEN`. For a roughly three-hour customer workload, start with 60-second polls, a 120-second liveness grace, and an expected duration of 10,800 seconds plus a 1,800-second late grace. That makes loss of customer-system visibility stale after roughly three minutes, while an observed `Running` job becomes late after 3.5 hours.
 
-Use only a non-sensitive test job. The adapter sends no raw command output, logs, payloads, or customer data to PingStep; it sends only the recognized state transition. A deliberately shortened 20-minute run is valid technical-integration evidence, but does not change the pilot’s normal 20–90 minute target-user screen if the real workload normally runs longer.
+Use only a non-sensitive test job. The adapter sends no raw command output, logs, payloads, or customer data to PingStep; it sends only the recognized state transition. A deliberately shortened run is useful technical-integration evidence; it does not prove customer demand or willingness to pay.
 
 ### Local status simulator
 
