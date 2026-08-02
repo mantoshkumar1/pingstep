@@ -9,7 +9,7 @@ PingStep will run as **one Cloudflare Worker with a Cloudflare D1 database**.
 - The Worker provides the public HTTPS event API and serves the operator dashboard.
 - D1 is the durable source of truth for jobs, accepted events, run projections, and alert-delivery records.
 - A Worker Cron Trigger runs once a minute to find runs whose liveness deadline has passed and mark them stale. The check is idempotent because scheduled delivery can occur more than once.
-- The pilot starts on a `workers.dev` URL. A custom domain can be attached after the end-to-end path is proven.
+- Production runs on `https://pingstep.dev`; the protected dashboard is at `https://pingstep.dev/app`.
 
 ## What runs where
 

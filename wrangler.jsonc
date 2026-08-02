@@ -4,7 +4,11 @@
   "main": "src/worker.ts",
   "compatibility_date": "2026-08-01",
   "compatibility_flags": ["nodejs_compat"],
-  "workers_dev": true,
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "pingstep.dev", "custom_domain": true },
+    { "pattern": "www.pingstep.dev", "custom_domain": true }
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
