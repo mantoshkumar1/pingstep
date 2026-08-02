@@ -10,8 +10,47 @@ import { policyFor, rollingWindowStart, type PlanCode } from './worker/plans';
 
 const json = (body: unknown, status = 200, headers: HeadersInit = {}) => Response.json(body, {
   status,
-  headers: { 'cache-control': 'no-store', ...headers }
+  headers: {
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+    'referrer-policy': 'strict-origin-when-cross-origin',
+    ...headers
+  }
 });
+const MAX_EVENT_BODY_BYTES = 64 * 1024;
+const MAX_CONTROL_BODY_BYTES = 16 * 1024;
+
+async function readJsonBody(request: Request, limit: number): Promise<unknown> {
+  const contentLength = request.headers.get('content-length');
+  if (contentLength && (!/^\d+$/.test(contentLength) || Number(contentLength) > limit)) {
+    throw new HttpError(413, 'Request body is too large.');
+  }
+  if (!request.body) throw new HttpError(400, 'Request body is required.');
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) {
+      await reader.cancel();
+      throw new HttpError(413, 'Request body is too large.');
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new HttpError(400, 'Request body must be valid JSON.');
+  }
+}
 
 async function handleRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -54,6 +93,9 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   if (request.method === 'GET' && url.pathname === '/status') {
     return env.ASSETS.fetch(new Request(new URL('/status.html', request.url), request));
   }
+  if (request.method === 'GET' && url.pathname === '/index.html') {
+    return Response.redirect(new URL('/app', request.url).toString(), 302);
+  }
   if (request.method === 'GET' && url.pathname === '/v1/runs') {
     const repository = new PingStepD1Repository(env.DB);
     const account = await currentAccount(request, repository);
@@ -74,12 +116,12 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   }
   if (request.method === 'POST' && url.pathname === '/v1/operator/jobs') {
     await requireOperator(request, env);
-    return json(await provisionJob(new PingStepD1Repository(env.DB), await request.json()), 201);
+    return json(await provisionJob(new PingStepD1Repository(env.DB), await readJsonBody(request, MAX_CONTROL_BODY_BYTES)), 201);
   }
   const accountPlanMatch = url.pathname.match(/^\/v1\/operator\/accounts\/([^/]+)\/plan$/);
   if (request.method === 'POST' && accountPlanMatch) {
     await requireOperator(request, env);
-    const body = await request.json() as { plan?: unknown; active_until?: unknown };
+    const body = await readJsonBody(request, MAX_CONTROL_BODY_BYTES) as { plan?: unknown; active_until?: unknown };
     if (body.plan !== 'trial' && body.plan !== 'pro' && body.plan !== 'team') throw new HttpError(400, 'plan must be trial, pro, or team.');
     if (body.active_until !== null && body.active_until !== undefined && (typeof body.active_until !== 'string' || Number.isNaN(Date.parse(body.active_until)))) {
       throw new HttpError(400, 'active_until must be an RFC 3339 timestamp or null.');
@@ -90,7 +132,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   }
   if (request.method === 'POST' && url.pathname === '/v1/operator/accounts/plan') {
     await requireOperator(request, env);
-    const body = await request.json() as { email?: unknown; plan?: unknown; active_until?: unknown };
+    const body = await readJsonBody(request, MAX_CONTROL_BODY_BYTES) as { email?: unknown; plan?: unknown; active_until?: unknown };
     if (typeof body.email !== 'string' || !body.email.trim()) throw new HttpError(400, 'email is required.');
     if (body.plan !== 'trial' && body.plan !== 'pro' && body.plan !== 'team') throw new HttpError(400, 'plan must be trial, pro, or team.');
     if (body.active_until !== null && body.active_until !== undefined && (typeof body.active_until !== 'string' || Number.isNaN(Date.parse(body.active_until)))) {
@@ -106,7 +148,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     requireSameOrigin(request);
     const repository = new PingStepD1Repository(env.DB);
     const account = await requireAccount(request, repository);
-    return json(await provisionJob(repository, await request.json(), account.id), 201);
+    return json(await provisionJob(repository, await readJsonBody(request, MAX_CONTROL_BODY_BYTES), account.id), 201);
   }
   const runMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)$/);
   const eventsMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)\/events$/);
@@ -146,11 +188,11 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   if (request.method === 'POST' && url.pathname === '/v1/events') {
     const service = new HostedPingStepService(new PingStepD1Repository(env.DB));
     const token = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? null;
-    const result = await service.ingest(await request.json(), token);
+    const result = await service.ingest(await readJsonBody(request, MAX_EVENT_BODY_BYTES), token);
     return json(result, result.duplicate ? 200 : 202);
   }
   if (url.pathname.startsWith('/v1/')) {
-    return json({ error: 'Hosted event API is being enabled in the next deployment task.' }, 503);
+    return json({ error: 'API endpoint not found.' }, 404);
   }
   return env.ASSETS.fetch(request);
 }
@@ -169,8 +211,12 @@ export default {
   async scheduled(_controller, env): Promise<void> {
     // Instantiated per invocation: no mutable request state is global.
     const repository = new PingStepD1Repository(env.DB);
+    const now = new Date().toISOString();
+    const expiredPendingEvents = await repository.expirePendingEvents(now);
+    const expiredOAuthStates = await repository.deleteExpiredOAuthStates(now);
+    const expiredSessions = await repository.deleteExpiredSessions(now);
     const changed = await new HostedPingStepService(repository).reconcile();
     const delivered = await deliverPendingAlerts(repository, env);
-    console.log(JSON.stringify({ event: 'scheduled_reconcile', stale_runs_marked: changed, alerts_delivered: delivered }));
+    console.log(JSON.stringify({ event: 'scheduled_reconcile', stale_runs_marked: changed, alerts_delivered: delivered, expired_pending_events: expiredPendingEvents, expired_oauth_states: expiredOAuthStates, expired_sessions: expiredSessions }));
   }
 } satisfies ExportedHandler<Env>;

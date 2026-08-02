@@ -11,6 +11,7 @@ test('dashboard has a direct GitHub sign-in route and guided first-job creation'
   assert.match(html, /\/v1\/jobs/);
   assert.match(html, /Your first run in four steps/);
   assert.match(html, /data-copy="job-token"/);
+  assert.match(html, /setInterval\(\(\)=>\{if\(!document\.hidden\)load/);
 });
 
 test('public lifecycle explains stale without calling it failed', async () => {
@@ -39,6 +40,9 @@ test('status and launch discovery assets are present', async () => {
   assert.match(sitemap, /https:\/\/pingstep.dev/);
   assert.match(locale, /PINGSTEP_LOCALES/);
   assert.match(llms, /not proof of failure/);
+  const headers = await publicFile('_headers');
+  assert.match(headers, /X-Content-Type-Options: nosniff/);
+  assert.match(headers, /frame-ancestors 'none'/);
 });
 
 test('pricing keeps the trial small and the paid plans explicit', async () => {

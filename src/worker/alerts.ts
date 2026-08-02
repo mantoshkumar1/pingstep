@@ -32,6 +32,7 @@ export async function deliverPendingAlerts(repository: PingStepD1Repository, env
     try {
       const response = await fetch(url, {
         method: 'POST',
+        signal: AbortSignal.timeout(10_000),
         headers: {
           'content-type': 'application/json',
           ...(token ? { authorization: `Bearer ${token}` } : {})

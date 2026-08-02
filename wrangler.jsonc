@@ -16,7 +16,7 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/", "/app", "/status"],
+    "run_worker_first": ["/", "/app", "/status", "/index.html"],
     "html_handling": "none",
     "not_found_handling": "404-page"
   },
