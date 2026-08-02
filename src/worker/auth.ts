@@ -1,5 +1,5 @@
-import { HttpError } from './service';
-import { PingStepD1Repository } from './repository';
+import { HttpError } from './service.ts';
+import { PingStepD1Repository } from './repository.ts';
 
 function bearerToken(request: Request): string | null {
   return request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? null;

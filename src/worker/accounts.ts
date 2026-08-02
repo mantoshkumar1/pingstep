@@ -1,5 +1,5 @@
-import { HttpError } from './service';
-import { PingStepD1Repository, StoredUser } from './repository';
+import { HttpError } from './service.ts';
+import { PingStepD1Repository, type StoredUser } from './repository.ts';
 
 const encoder = new TextEncoder();
 const SESSION_COOKIE = '__Host-pingstep_session';

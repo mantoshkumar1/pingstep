@@ -1,6 +1,6 @@
-import { HttpError } from './service';
-import { PingStepD1Repository } from './repository';
-import { policyFor } from './plans';
+import { HttpError } from './service.ts';
+import { PingStepD1Repository } from './repository.ts';
+import { policyFor } from './plans.ts';
 
 type JobInput = {
   job_key?: unknown;

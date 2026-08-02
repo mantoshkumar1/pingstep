@@ -156,4 +156,7 @@ The scorecard returns `proceed` only for five qualified conversations, three rea
 
 ```sh
 npm test
+npm run test:coverage
 ```
+
+`test:coverage` is the enforced guard for the production Worker core: lifecycle processing, access control, provisioning limits, and plan policy. It requires at least 90% line coverage, 90% function coverage, and 65% branch coverage across those paths. Run it before merging any generated or manually authored change to the Worker.

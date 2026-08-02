@@ -5,3 +5,4 @@ node_modules/
 .dev.vars.*
 __pycache__/
 *.pyc
+.DS_Store
