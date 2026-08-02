@@ -3,7 +3,7 @@
 import { PingStepD1Repository } from './worker/repository.ts';
 import { HostedPingStepService, HttpError } from './worker/service.ts';
 import { requireOperator, requireReadAccess } from './worker/auth.ts';
-import { provisionJob } from './worker/operator.ts';
+import { deleteJob, provisionJob, rotateJobTokens } from './worker/operator.ts';
 import { deliverPendingAlerts } from './worker/alerts.ts';
 import { completeOAuth, currentAccount, requireAccount, requireSameOrigin, signOut, startOAuth } from './worker/accounts.ts';
 import { policyFor, rollingWindowStart, type PlanCode } from './worker/plans.ts';
@@ -149,6 +149,22 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     const repository = new PingStepD1Repository(env.DB);
     const account = await requireAccount(request, repository);
     return json(await provisionJob(repository, await readJsonBody(request, MAX_CONTROL_BODY_BYTES), account.id), 201);
+  }
+  if (request.method === 'GET' && url.pathname === '/v1/jobs') {
+    const repository = new PingStepD1Repository(env.DB);
+    const account = await requireAccount(request, repository);
+    return json({ jobs: await repository.listJobsForOwner(account.id) });
+  }
+  const jobActionMatch = url.pathname.match(/^\/v1\/jobs\/([^/]+)\/(tokens\/rotate|delete)$/);
+  if (request.method === 'POST' && jobActionMatch) {
+    requireSameOrigin(request);
+    const repository = new PingStepD1Repository(env.DB);
+    const account = await requireAccount(request, repository);
+    const jobKey = decodeURIComponent(jobActionMatch[1]);
+    const body = await readJsonBody(request, MAX_CONTROL_BODY_BYTES);
+    if (jobActionMatch[2] === 'tokens/rotate') return json(await rotateJobTokens(repository, jobKey, body, account.id));
+    await deleteJob(repository, jobKey, body, account.id);
+    return json({ ok: true });
   }
   const runMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)$/);
   const eventsMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)\/events$/);
