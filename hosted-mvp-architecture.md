@@ -14,15 +14,15 @@ PingStep will run as **one Cloudflare Worker with a Cloudflare D1 database**.
 ## What runs where
 
 ```text
-Office laptop                         Cloudflare
-PACE command -> Python adapter  --HTTPS-->  Worker -> D1
+Customer environment                  Cloudflare
+Customer status command -> adapter --HTTPS--> Worker -> D1
                                           |       |
                                           |       +-- events, runs, alerts
                                           +-- dashboard in a browser
                                           +-- minute-by-minute stale check
 ```
 
-The PACE adapter stays on the office laptop because that is where `pace -jobStatus` is permitted. It sends only a small, authenticated lifecycle event to PingStep; neither Jenkins logs nor raw PACE output leave the company network.
+The customer adapter runs where the customer's approved status command is available. It sends only a small, authenticated lifecycle event to PingStep; raw command output and customer data remain in the customer environment.
 
 ## Boundaries for this MVP
 
@@ -36,7 +36,7 @@ Included:
 
 Not included yet:
 
-- Sending Jenkins logs, SQL, PACE output, customer data, or secrets to PingStep.
+- Sending raw logs, SQL, command output, customer data, or secrets to PingStep.
 - Inferring job progress from logs.
 - Multi-tenant organization management, SSO, mobile apps, or an agent installed by PingStep.
 
@@ -64,13 +64,13 @@ All Worker SQL uses parameter binding. Timestamps are stored as ISO-8601 UTC str
 1. Create the D1 database and add its ID to `wrangler.jsonc`.
 2. Apply the tracked D1 migration remotely.
 3. Deploy the Worker to the staging environment and use its HTTPS URL with the local simulator.
-4. Provision one job token, configure the office-laptop PACE adapter with that URL/token, and verify one non-sensitive PACE run.
+4. Provision one job token, configure the customer-environment adapter with that URL/token, and verify one non-sensitive customer run.
 5. Enable stale alert delivery and invite the first design partner only after operator authentication is in place.
 
 ## Evidence versus assumptions
 
-**Evidence:** PACE is accessible only from the office laptop; Jenkins triggers the PACE job and then exits; PACE states include Queue, Staging, Running, Complete, Error, and Terminated; some real jobs can remain Running for roughly three hours with no automatic stall signal.
+**Evidence:** A customer-managed job system can be accessible only from its own environment; customer job systems may expose states such as Queue, Staging, Running, Complete, Error, and Terminated; some real jobs can remain Running for roughly three hours with no automatic stall signal.
 
 **Assumptions to test:** The office network permits outbound HTTPS to the Worker URL; a one-minute stale evaluation is sufficiently responsive for the pilot; D1’s MVP limits fit the early event volume; design partners will accept a bearer-token adapter before SSO is available.
 
-If outbound HTTPS is blocked, the fallback is a customer-approved egress relay or an approved internal forwarder—not exposing an inbound service inside the company network.
+If outbound HTTPS is blocked, the fallback is a customer-approved egress relay or forwarder—not exposing an inbound service in the customer environment.

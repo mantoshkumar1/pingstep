@@ -20,7 +20,7 @@ This initial service accepts explicit lifecycle events and durably derives a run
 
 ## Fast local test
 
-Run a complete local test with no external account, PACE job, or secrets:
+Run a complete local test with no external account, customer job system, or secrets:
 
 ```sh
 npm run demo
@@ -102,19 +102,19 @@ node bin/pingstep.js succeeded --job billing-nightly-export --run "$RUN_ID" --se
 
 Install the package globally or invoke `node bin/pingstep.js` directly. The helper prints the generated run ID from `start`; later events require that ID and an explicit increasing sequence.
 
-### PACE status adapter (local integration test)
+### Customer-status adapter (integration template)
 
-For a consenting internal PACE job, `examples/pace_adapter.py` can poll the local `pace -jobStatus -job_id` command and emit explicit PingStep state transitions. On each successful repeated poll it emits a heartbeat. This means **stale** tells you the adapter can no longer see PACE; it does not mean repeated `Running` proves the PACE job is advancing. Configure an expected duration to surface a long-running `Running` job as **late**.
+`examples/customer_status_adapter.py` is a customer-environment template for polling a customer-managed status command and emitting explicit PingStep state transitions. Adapt the command invocation inside `customer_state()` to the customer's approved command. On each successful repeated poll it emits a heartbeat. This means **stale** tells you the adapter can no longer see the customer job system; it does not mean repeated `Running` proves the job is advancing. Configure an expected duration to surface a long-running `Running` job as **late**.
 
 ```sh
 export PINGSTEP_URL='http://localhost:3000'
 export PINGSTEP_TOKEN='your-job-token'
-python3 examples/pace_adapter.py --pace-job-id '<job-id>' --job-key pace-integration-test --poll-seconds 60
+python3 examples/customer_status_adapter.py --customer-job-id '<job-id>' --job-key customer-integration-test --poll-seconds 60
 ```
 
-For the hosted service, set `PINGSTEP_URL='https://pingstep.mantoshk234.workers.dev'`. Create the job and obtain its one-time job token through the operator endpoint first; use that token as `PINGSTEP_TOKEN`. For your roughly three-hour PACE workload, start with 60-second polls, a 120-second liveness grace, and an expected duration of 10,800 seconds plus a 1,800-second late grace. That makes loss of PACE visibility stale after roughly three minutes, while an observed `Running` job becomes late after 3.5 hours.
+For the hosted service, set `PINGSTEP_URL='https://pingstep.mantoshk234.workers.dev'`. Create the job and obtain its one-time job token through the operator endpoint first; use that token as `PINGSTEP_TOKEN`. For a roughly three-hour customer workload, start with 60-second polls, a 120-second liveness grace, and an expected duration of 10,800 seconds plus a 1,800-second late grace. That makes loss of customer-system visibility stale after roughly three minutes, while an observed `Running` job becomes late after 3.5 hours.
 
-Use only a non-sensitive test job. The adapter sends no Jenkins logs or PACE output to PingStep; it sends only the recognized state transition. A deliberately shortened 20-minute PACE run is valid technical-integration evidence, but does not change the pilot’s normal 20–90 minute target-user screen if the real workload normally runs longer.
+Use only a non-sensitive test job. The adapter sends no raw command output, logs, payloads, or customer data to PingStep; it sends only the recognized state transition. A deliberately shortened 20-minute run is valid technical-integration evidence, but does not change the pilot’s normal 20–90 minute target-user screen if the real workload normally runs longer.
 
 ### Local status simulator
 
