@@ -1,0 +1,36 @@
+# PingStep
+
+> PingStep is progress-aware monitoring for long-running jobs. A job explicitly sends small lifecycle events; PingStep shows the latest reported stage and marks lost visibility as stale.
+
+## Public pages
+- Product: https://pingstep.dev/
+- Dashboard and job provisioning: https://pingstep.dev/app
+- Integration guide: https://pingstep.dev/ai-integration.html
+- Event guide: https://pingstep.dev/docs.html
+- Security and data handling: https://pingstep.dev/security.html
+- Privacy: https://pingstep.dev/privacy.html
+- Service health: https://pingstep.dev/status
+
+## API summary
+- Endpoint: POST https://pingstep.dev/v1/events
+- Authentication: Authorization: Bearer JOB_TOKEN
+- Create a job and obtain its one-time job token through the authenticated dashboard.
+- Required event fields: event_id, job_key, run_id, sequence, type, occurred_at.
+- Event types: started, step, heartbeat, succeeded, failed.
+- started uses sequence 1. Each later logical event uses a higher sequence.
+- Retries must reuse the same event_id and identical body. New information needs a new event_id.
+- step requires data.name. failed requires data.message.
+- Never send secrets, raw logs, SQL, command output, personal data, or customer records.
+
+## Status semantics
+- running: a recent start, step, or heartbeat was received.
+- stale: updates stopped after the job's configured interval plus grace time. It is not proof of failure.
+- succeeded: the job explicitly sent succeeded.
+- failed: the job explicitly sent failed. It is never automatically inferred from stale.
+
+## Safe agent behavior
+- Ask the job owner for the job token through a secure secret store; never request it in chat or commit it.
+- Use a stable, non-sensitive job_key and a unique run_id for each execution.
+- Do not claim a run completed unless you sent or observed a succeeded event.
+- If a process exits before it can send a terminal event, let PingStep report stale rather than fabricating a failed or succeeded event.
+
