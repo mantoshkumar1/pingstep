@@ -112,7 +112,7 @@ export PINGSTEP_TOKEN='your-job-token'
 python3 examples/customer_status_adapter.py --customer-job-id '<job-id>' --job-key customer-integration-test --poll-seconds 60
 ```
 
-For the hosted service, set `PINGSTEP_URL='https://pingstep.mantoshk234.workers.dev'`. Create the job and obtain its one-time job token through the operator endpoint first; use that token as `PINGSTEP_TOKEN`. For a roughly three-hour customer workload, start with 60-second polls, a 120-second liveness grace, and an expected duration of 10,800 seconds plus a 1,800-second late grace. That makes loss of customer-system visibility stale after roughly three minutes, while an observed `Running` job becomes late after 3.5 hours.
+For the hosted service, set `PINGSTEP_URL='https://pingstep.dev'`. Create the job and obtain its one-time job token through the protected operator dashboard at `https://pingstep.dev/app`; use that token as `PINGSTEP_TOKEN`. For a roughly three-hour customer workload, start with 60-second polls, a 120-second liveness grace, and an expected duration of 10,800 seconds plus a 1,800-second late grace. That makes loss of customer-system visibility stale after roughly three minutes, while an observed `Running` job becomes late after 3.5 hours.
 
 Use only a non-sensitive test job. The adapter sends no raw command output, logs, payloads, or customer data to PingStep; it sends only the recognized state transition. A deliberately shortened 20-minute run is valid technical-integration evidence, but does not change the pilot’s normal 20–90 minute target-user screen if the real workload normally runs longer.
 
