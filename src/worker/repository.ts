@@ -25,6 +25,11 @@ export type StoredSession = {
   email: string;
 };
 
+export type OAuthIdentityUser = {
+  id: string;
+  email: string;
+};
+
 export type StoredEvent = {
   event_id: string;
   job_key: string;
@@ -215,6 +220,33 @@ export class PingStepD1Repository {
   async getUserByEmail(email: string): Promise<StoredUser | null> {
     return this.db.prepare('SELECT id, email, password_hash, created_at FROM users WHERE email = ?')
       .bind(email).first<StoredUser>();
+  }
+
+  async getUserByOAuthIdentity(provider: string, subject: string): Promise<OAuthIdentityUser | null> {
+    return this.db.prepare(`
+      SELECT u.id, u.email
+      FROM oauth_identities i INNER JOIN users u ON u.id = i.user_id
+      WHERE i.provider = ? AND i.subject = ?
+    `).bind(provider, subject).first<OAuthIdentityUser>();
+  }
+
+  async createOAuthIdentity(provider: string, subject: string, userId: string, createdAt: string): Promise<void> {
+    await this.db.prepare(`
+      INSERT INTO oauth_identities (provider, subject, user_id, created_at) VALUES (?, ?, ?, ?)
+    `).bind(provider, subject, userId, createdAt).run();
+  }
+
+  async createOAuthState(state: string, provider: string, expiresAt: string): Promise<void> {
+    await this.db.prepare(`
+      INSERT INTO oauth_states (state, provider, expires_at, created_at) VALUES (?, ?, ?, ?)
+    `).bind(state, provider, expiresAt, new Date().toISOString()).run();
+  }
+
+  async consumeOAuthState(state: string, provider: string, now: string): Promise<boolean> {
+    const result = await this.db.prepare(`
+      DELETE FROM oauth_states WHERE state = ? AND provider = ? AND expires_at > ?
+    `).bind(state, provider, now).run();
+    return result.meta.changes === 1;
   }
 
   async createSession(session: Omit<StoredSession, 'email'>): Promise<void> {

@@ -5,7 +5,7 @@ import { HostedPingStepService, HttpError } from './worker/service';
 import { requireOperator, requireReadAccess } from './worker/auth';
 import { provisionJob } from './worker/operator';
 import { deliverPendingAlerts } from './worker/alerts';
-import { currentAccount, requireAccount, requireSameOrigin, signIn, signOut, signUp } from './worker/accounts';
+import { completeOAuth, currentAccount, requireAccount, requireSameOrigin, signOut, startOAuth } from './worker/accounts';
 
 const json = (body: unknown, status = 200, headers: HeadersInit = {}) => Response.json(body, {
   status,
@@ -23,16 +23,10 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   if (request.method === 'GET' && url.pathname === '/v1/auth/me') {
     return json({ user: await currentAccount(request, new PingStepD1Repository(env.DB)) });
   }
-  if (request.method === 'POST' && url.pathname === '/v1/auth/signup') {
-    requireSameOrigin(request);
-    const result = await signUp(new PingStepD1Repository(env.DB), await request.json());
-    return json({ user: result.user }, 201, { 'set-cookie': result.cookie });
-  }
-  if (request.method === 'POST' && url.pathname === '/v1/auth/signin') {
-    requireSameOrigin(request);
-    const result = await signIn(new PingStepD1Repository(env.DB), await request.json());
-    return json({ user: result.user }, 200, { 'set-cookie': result.cookie });
-  }
+  const oauthStartMatch = url.pathname.match(/^\/v1\/auth\/(github|google)$/);
+  if (request.method === 'GET' && oauthStartMatch) return startOAuth(request, env, new PingStepD1Repository(env.DB), oauthStartMatch[1]);
+  const oauthCallbackMatch = url.pathname.match(/^\/v1\/auth\/(github|google)\/callback$/);
+  if (request.method === 'GET' && oauthCallbackMatch) return completeOAuth(request, env, new PingStepD1Repository(env.DB), oauthCallbackMatch[1]);
   if (request.method === 'POST' && url.pathname === '/v1/auth/signout') {
     requireSameOrigin(request);
     return json({ ok: true }, 200, { 'set-cookie': await signOut(request, new PingStepD1Repository(env.DB)) });
