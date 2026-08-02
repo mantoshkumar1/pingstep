@@ -32,7 +32,7 @@ def main():
     parser.add_argument("--run-seconds", type=int, default=1200, help="Total simulated duration; use 60 for a quick check.")
     parser.add_argument("--transition-seconds", type=int, default=5, help="How long Queue and Staging remain visible.")
     parser.add_argument("--progress-seconds", type=int, default=3, help="How often Running reports visible progress.")
-    parser.add_argument("--outcome", choices=("complete", "error", "terminated"), default="complete")
+    parser.add_argument("--outcome", choices=("active", "stale", "complete", "error", "terminated"), default="complete")
     args = parser.parse_args()
     if args.run_seconds < args.transition_seconds * 2 + 1:
         parser.error("--run-seconds must leave at least one second after Queue and Staging.")
@@ -70,6 +70,9 @@ def main():
         time.sleep(delay)
         elapsed += delay
 
+    if args.outcome in ("active", "stale"):
+        print("Stopped reporting; no terminal event sent.", flush=True)
+        return
     sequence += 1
     terminal_type = "succeeded" if args.outcome == "complete" else "failed"
     data = {"stage": args.outcome.title()}

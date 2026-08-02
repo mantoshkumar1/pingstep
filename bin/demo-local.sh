@@ -6,6 +6,7 @@ PORT="${PINGSTEP_DEMO_PORT:-3000}"
 RUN_SECONDS="${PINGSTEP_DEMO_RUN_SECONDS:-60}"
 JOB_KEY="${PINGSTEP_DEMO_JOB_KEY:-laptop-sim}"
 JOBS="${PINGSTEP_DEMO_JOBS:-1}"
+OUTCOME="${PINGSTEP_DEMO_OUTCOME:-complete}"
 DEMO_DIR="${TMPDIR:-/tmp}/pingstep-demo-$$"
 TOKEN="pingstep-demo-$(node -e 'console.log(require("crypto").randomBytes(18).toString("hex"))')"
 TOKEN_HASH="$(npm run --silent hash-token -- "$TOKEN")"
@@ -34,6 +35,15 @@ for index in $(seq 1 "$JOBS"); do
   CONFIG_ENTRIES="$CONFIG_ENTRIES$separator\"$key\":{\"expected_update_interval_seconds\":600,\"expected_duration_seconds\":$RUN_SECONDS,\"late_grace_seconds\":0}"
 done
 export PINGSTEP_JOB_TOKEN_HASHES_JSON="{$TOKEN_ENTRIES}"
+if [ "$OUTCOME" = "stale" ]; then
+  CONFIG_ENTRIES=""
+  for index in $(seq 1 "$JOBS"); do
+    key="$JOB_KEY-$index"; if [ "$JOBS" -eq 1 ]; then key="$JOB_KEY"; fi
+    separator=""; if [ "$index" -gt 1 ]; then separator=","; fi
+    CONFIG_ENTRIES="$CONFIG_ENTRIES$separator\"$key\":{\"expected_update_interval_seconds\":6,\"liveness_grace_seconds\":1}"
+  done
+  export PINGSTEP_EVALUATOR_INTERVAL_MS=1000
+fi
 export PINGSTEP_JOB_CONFIG_JSON="{$CONFIG_ENTRIES}"
 export PINGSTEP_URL="http://localhost:$PORT"
 export PINGSTEP_TOKEN="$TOKEN"
@@ -55,9 +65,11 @@ PIDS=""
 for index in $(seq 1 "$JOBS"); do
   key="$JOB_KEY-$index"
   if [ "$JOBS" -eq 1 ]; then key="$JOB_KEY"; fi
-  python3 examples/simulate_statuses.py --job-key "$key" --run-seconds "$RUN_SECONDS" &
+  progress=3; if [ "$OUTCOME" = "stale" ]; then progress=1; fi
+  python3 examples/simulate_statuses.py --job-key "$key" --run-seconds "$RUN_SECONDS" --progress-seconds "$progress" --outcome "$OUTCOME" &
   PIDS="$PIDS $!"
 done
 for pid in $PIDS; do wait "$pid"; done
+if [ "$OUTCOME" = "stale" ]; then sleep 8; fi
 echo "\nFinal run state:"
 curl -fsS "$PINGSTEP_URL/v1/runs"
