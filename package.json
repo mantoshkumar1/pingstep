@@ -10,6 +10,7 @@
     "start": "node src/server.js",
     "test": "node --test --experimental-strip-types",
     "test:coverage": "node --test --experimental-strip-types --experimental-test-coverage --test-coverage-include='src/worker/service.ts' --test-coverage-include='src/worker/auth.ts' --test-coverage-include='src/worker/operator.ts' --test-coverage-include='src/worker/plans.ts' --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=65 test/worker-core.test.ts",
+    "test:e2e": "playwright test",
     "hash-token": "node src/hash-token.js",
     "pilot-scorecard": "node bin/pilot-scorecard.js",
     "demo": "sh bin/demo-local.sh",
@@ -20,6 +21,7 @@
     "worker:deploy:dry-run": "wrangler deploy --dry-run"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "typescript": "^7.0.2",
     "wrangler": "^4.118.0"
   }
