@@ -60,16 +60,14 @@ Use this only after a partner passes the screen and agrees to a pilot.
 
 1. Confirm the job is real, runs unattended for roughly 20–90 minutes, and can be observed without sending data or secrets to PingStep.
 2. Agree on a stable `job_key`, expected heartbeat interval, and—only if they want late detection—an expected duration. Record these in the tracker.
-3. Ask the partner to generate a job-specific random token locally. They send only the SHA-256 hash for server configuration; the raw token stays in their environment.
-4. Configure the server with the job token hash and job settings. Example:
-
-   ```sh
-   export PINGSTEP_JOB_TOKEN_HASHES_JSON='{"partner-job":"<sha256 token hash>"}'
-   export PINGSTEP_JOB_CONFIG_JSON='{"partner-job":{"expected_update_interval_seconds":300,"expected_duration_seconds":3600}}'
-   ```
+3. In the protected operator dashboard, provision the job with its expected update interval and liveness grace. PingStep shows two one-time tokens:
+   - **Job token:** give this only to the script owner; their script uses it to send events.
+   - **Viewer token:** give this only to the pilot user; it grants read-only access to this one job in the dashboard.
+   PingStep stores only hashes of both tokens. Never put either token in the research tracker, ticket, or chat history.
+4. The pilot user opens the hosted dashboard, selects **Sign in**, and pastes the viewer token. The token stays only in that browser session and cannot expose other jobs, alerts, or operator controls.
 
 5. Add explicit `started`, meaningful `step` or periodic `heartbeat`, and terminal `succeeded`/`failed` events to the script. Do not parse arbitrary logs in this pilot.
-6. Set the partner’s approved webhook destination if they want alerts. Send one harmless test event before the real run.
+6. Alert destinations are intentionally deferred until a qualified partner asks for one. For the first observed run, confirm that the scoped dashboard view answers the partner’s question.
 7. Observe one real run in the dashboard. Record setup duration, any integration failure, and whether the current step/liveness view answered the partner’s actual question.
 8. Conduct a five-minute debrief after the run. Ask for a paid-pilot or switching decision directly; record the answer verbatim.
 
