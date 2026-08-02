@@ -25,3 +25,27 @@ test('signed-in user can create a job without exposing workflow details', async 
   await expect(page.locator('#viewer-token')).toHaveText('ps_view_test');
   await expect(page.locator('#tokens')).toBeVisible();
 });
+
+test('owner can rotate tokens and delete a job only after exact-key confirmation', async ({ page }) => {
+  let jobs = [{ job_key: 'nightly-backup' }];
+  const confirmations = [];
+  await page.route('**/v1/auth/me', route => route.fulfill({ json: { user: { email: 'engineer@example.test' } } }));
+  await page.route('**/v1/runs', route => route.fulfill({ json: { runs: [] } }));
+  await page.route('**/v1/jobs**', async route => {
+    const request = route.request();
+    if (request.method() === 'GET') return route.fulfill({ json: { jobs } });
+    const body = JSON.parse(request.postData() || '{}');
+    confirmations.push(body.confirm_job_key);
+    if (request.url().endsWith('/tokens/rotate')) return route.fulfill({ json: { token: 'ps_job_rotated', viewer_token: 'ps_view_rotated' } });
+    jobs = [];
+    return route.fulfill({ json: { ok: true } });
+  });
+  page.on('dialog', dialog => dialog.accept('nightly-backup'));
+  await page.goto('/app');
+  await expect(page.getByRole('button', { name: 'Rotate tokens' })).toBeVisible();
+  await page.getByRole('button', { name: 'Rotate tokens' }).click();
+  await expect(page.locator('#job-token')).toHaveText('ps_job_rotated');
+  await page.getByRole('button', { name: 'Delete job' }).click();
+  await expect(page.locator('#jobs')).toContainText('No jobs yet.');
+  expect(confirmations).toEqual(['nightly-backup', 'nightly-backup']);
+});
