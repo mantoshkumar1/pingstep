@@ -88,6 +88,20 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     await repository.setAccountPlan(decodeURIComponent(accountPlanMatch[1]), body.plan as PlanCode, body.active_until ?? null, new Date().toISOString());
     return json({ ok: true });
   }
+  if (request.method === 'POST' && url.pathname === '/v1/operator/accounts/plan') {
+    await requireOperator(request, env);
+    const body = await request.json() as { email?: unknown; plan?: unknown; active_until?: unknown };
+    if (typeof body.email !== 'string' || !body.email.trim()) throw new HttpError(400, 'email is required.');
+    if (body.plan !== 'trial' && body.plan !== 'pro' && body.plan !== 'team') throw new HttpError(400, 'plan must be trial, pro, or team.');
+    if (body.active_until !== null && body.active_until !== undefined && (typeof body.active_until !== 'string' || Number.isNaN(Date.parse(body.active_until)))) {
+      throw new HttpError(400, 'active_until must be an RFC 3339 timestamp or null.');
+    }
+    const repository = new PingStepD1Repository(env.DB);
+    const user = await repository.getUserByEmail(body.email.trim().toLowerCase());
+    if (!user) throw new HttpError(404, 'Account not found.');
+    await repository.setAccountPlan(user.id, body.plan as PlanCode, body.active_until ?? null, new Date().toISOString());
+    return json({ ok: true });
+  }
   if (request.method === 'POST' && url.pathname === '/v1/jobs') {
     requireSameOrigin(request);
     const repository = new PingStepD1Repository(env.DB);
