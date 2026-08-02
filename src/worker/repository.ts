@@ -53,6 +53,9 @@ export type AlertRecord = {
   created_at: string;
   delivery_status: 'pending' | 'delivered' | 'failed';
   attempts: number;
+  last_attempt_at?: string | null;
+  delivered_at?: string | null;
+  last_error?: string | null;
 };
 
 /**
@@ -199,10 +202,36 @@ export class PingStepD1Repository {
 
   async listAlerts(): Promise<AlertRecord[]> {
     const result = await this.db.prepare(`
-      SELECT id, type, job_key, run_id, status, current_step, message, created_at, delivery_status, attempts
+      SELECT id, type, job_key, run_id, status, current_step, message, created_at, delivery_status, attempts,
+             last_attempt_at, delivered_at, last_error
       FROM alerts ORDER BY created_at DESC LIMIT 100
     `).all<AlertRecord>();
     return result.results;
+  }
+
+  async listPendingAlerts(): Promise<AlertRecord[]> {
+    const result = await this.db.prepare(`
+      SELECT id, type, job_key, run_id, status, current_step, message, created_at, delivery_status, attempts,
+             last_attempt_at, delivered_at, last_error
+      FROM alerts WHERE delivery_status = 'pending' ORDER BY created_at ASC LIMIT 25
+    `).all<AlertRecord>();
+    return result.results;
+  }
+
+  async markAlertDelivered(id: string, now: string): Promise<void> {
+    await this.db.prepare(`
+      UPDATE alerts
+      SET delivery_status = 'delivered', attempts = attempts + 1, last_attempt_at = ?, delivered_at = ?, last_error = NULL
+      WHERE id = ? AND delivery_status = 'pending'
+    `).bind(now, now, id).run();
+  }
+
+  async markAlertFailed(id: string, now: string, message: string): Promise<void> {
+    await this.db.prepare(`
+      UPDATE alerts
+      SET attempts = attempts + 1, last_attempt_at = ?, last_error = ?
+      WHERE id = ? AND delivery_status = 'pending'
+    `).bind(now, message.slice(0, 500), id).run();
   }
 
   async upsertRun(run: RunProjection): Promise<void> {
