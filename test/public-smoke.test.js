@@ -75,5 +75,5 @@ test('pricing keeps the trial small and the paid plans explicit', async () => {
   assert.match(pricing, /10 runs in a rolling 30 days/);
   assert.match(pricing, /US\$12/);
   assert.match(pricing, /US\$39/);
-  assert.match(pricing, /Automated card checkout is not live yet/);
+  assert.match(pricing, /Paid access is enabled after a payment request is confirmed/);
 });
