@@ -3,6 +3,7 @@
 import { PingStepD1Repository } from './worker/repository';
 import { HostedPingStepService, HttpError } from './worker/service';
 import { requireOperator } from './worker/auth';
+import { provisionJob } from './worker/operator';
 
 const json = (body: unknown, status = 200) => Response.json(body, {
   status,
@@ -20,6 +21,14 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   if (request.method === 'GET' && url.pathname === '/v1/runs') {
     await requireOperator(request, env);
     return json({ runs: await new PingStepD1Repository(env.DB).listRuns() });
+  }
+  if (request.method === 'GET' && url.pathname === '/v1/operator/jobs') {
+    await requireOperator(request, env);
+    return json({ jobs: await new PingStepD1Repository(env.DB).listJobs() });
+  }
+  if (request.method === 'POST' && url.pathname === '/v1/operator/jobs') {
+    await requireOperator(request, env);
+    return json(await provisionJob(new PingStepD1Repository(env.DB), await request.json()), 201);
   }
   const runMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)$/);
   const eventsMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)\/events$/);
