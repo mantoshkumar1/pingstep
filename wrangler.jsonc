@@ -13,6 +13,7 @@
     "directory": "./public",
     "binding": "ASSETS",
     "run_worker_first": ["/", "/app"],
+    "html_handling": "none",
     "not_found_handling": "404-page"
   },
   "d1_databases": [
