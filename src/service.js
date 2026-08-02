@@ -45,9 +45,12 @@ function livenessSettings(jobConfig = {}) {
     ? jobConfig.expected_update_interval_seconds
     : DEFAULT_INTERVAL_SECONDS;
   if (interval <= 0) throw validationError('expected_update_interval_seconds must be positive.');
-  const grace = jobConfig.expected_update_interval_seconds === undefined
+  const grace = jobConfig.liveness_grace_seconds !== undefined
+    ? jobConfig.liveness_grace_seconds
+    : jobConfig.expected_update_interval_seconds === undefined
     ? DEFAULT_GRACE_SECONDS
     : Math.max(DEFAULT_GRACE_SECONDS, interval * 2);
+  if (!Number.isFinite(grace) || grace < 0) throw validationError('liveness_grace_seconds must be zero or positive.');
   return { interval, grace };
 }
 
