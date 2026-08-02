@@ -1,4 +1,4 @@
-import { type AlertRecord, PingStepD1Repository } from './repository';
+import { type AlertRecord, PingStepD1Repository } from './repository.ts';
 
 function secret(env: Env, name: string): string | undefined {
   const value = Reflect.get(env, name);

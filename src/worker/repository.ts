@@ -91,7 +91,11 @@ export type AlertRecord = {
  * every value is passed through a prepared-statement binding.
  */
 export class PingStepD1Repository {
-  constructor(private readonly db: D1Database) {}
+  private readonly db: D1Database;
+
+  constructor(db: D1Database) {
+    this.db = db;
+  }
 
   async getJob(jobKey: string): Promise<StoredJob | null> {
     return this.db.prepare(`

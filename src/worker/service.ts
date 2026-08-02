@@ -1,5 +1,5 @@
-import { PingStepD1Repository, type RunProjection, type StoredEvent } from './repository';
-import { policyFor, rollingWindowStart } from './plans';
+import { PingStepD1Repository, type RunProjection, type StoredEvent } from './repository.ts';
+import { policyFor, rollingWindowStart } from './plans.ts';
 
 const EVENT_TYPES = new Set(['started', 'step', 'heartbeat', 'succeeded', 'failed', 'cancelled']);
 const TERMINAL_TYPES = new Set(['succeeded', 'failed', 'cancelled']);
@@ -16,7 +16,12 @@ export type LifecycleEvent = {
 };
 
 export class HttpError extends Error {
-  constructor(readonly status: number, message: string) { super(message); }
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
 }
 
 function isValidTimestamp(value: unknown): value is string {
@@ -63,7 +68,13 @@ function plusSeconds(timestamp: string, seconds: number): string {
 }
 
 export class HostedPingStepService {
-  constructor(private readonly repository: PingStepD1Repository, private readonly now = () => new Date()) {}
+  private readonly repository: PingStepD1Repository;
+  private readonly now: () => Date;
+
+  constructor(repository: PingStepD1Repository, now = () => new Date()) {
+    this.repository = repository;
+    this.now = now;
+  }
 
   async ingest(rawEvent: unknown, token: string | null) {
     validateEvent(rawEvent);

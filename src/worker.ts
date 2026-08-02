@@ -1,12 +1,12 @@
 /// <reference path="../worker-configuration.d.ts" />
 
-import { PingStepD1Repository } from './worker/repository';
-import { HostedPingStepService, HttpError } from './worker/service';
-import { requireOperator, requireReadAccess } from './worker/auth';
-import { provisionJob } from './worker/operator';
-import { deliverPendingAlerts } from './worker/alerts';
-import { completeOAuth, currentAccount, requireAccount, requireSameOrigin, signOut, startOAuth } from './worker/accounts';
-import { policyFor, rollingWindowStart, type PlanCode } from './worker/plans';
+import { PingStepD1Repository } from './worker/repository.ts';
+import { HostedPingStepService, HttpError } from './worker/service.ts';
+import { requireOperator, requireReadAccess } from './worker/auth.ts';
+import { provisionJob } from './worker/operator.ts';
+import { deliverPendingAlerts } from './worker/alerts.ts';
+import { completeOAuth, currentAccount, requireAccount, requireSameOrigin, signOut, startOAuth } from './worker/accounts.ts';
+import { policyFor, rollingWindowStart, type PlanCode } from './worker/plans.ts';
 
 const json = (body: unknown, status = 200, headers: HeadersInit = {}) => Response.json(body, {
   status,

@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test",
+    "test": "node --test --experimental-strip-types",
+    "test:coverage": "node --test --experimental-strip-types --experimental-test-coverage --test-coverage-include='src/worker/service.ts' --test-coverage-include='src/worker/auth.ts' --test-coverage-include='src/worker/operator.ts' --test-coverage-include='src/worker/plans.ts' --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=65 test/worker-core.test.ts",
     "hash-token": "node src/hash-token.js",
     "pilot-scorecard": "node bin/pilot-scorecard.js",
     "demo": "sh bin/demo-local.sh",

@@ -7,5 +7,4 @@
 - Job and viewer tokens are one-time values. Store only token hashes and never render values after provisioning.
 - Event retries reuse the same `event_id` and identical payload; new facts use a new event ID and higher sequence number.
 - Keep public copy plain, factual, and customer-neutral. Do not mention internal systems or imply unverified reliability claims.
-- Run `npm test` and `npm run worker:check` after behavior changes.
-
+- Run `npm test`, `npm run test:coverage`, and `npm run worker:check` after behavior changes. The Worker-core coverage gate is deliberate: do not lower it to make a change pass; add a regression test instead.
