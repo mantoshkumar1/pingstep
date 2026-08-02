@@ -1,5 +1,6 @@
 import { HttpError } from './service';
 import { PingStepD1Repository } from './repository';
+import { policyFor } from './plans';
 
 type JobInput = {
   job_key?: unknown;
@@ -43,11 +44,6 @@ function createViewerToken(): string {
 export async function provisionJob(repository: PingStepD1Repository, rawInput: unknown, ownerUserId: string | null = null) {
   if (!rawInput || typeof rawInput !== 'object' || Array.isArray(rawInput)) throw new HttpError(400, 'Job configuration must be a JSON object.');
   const input = rawInput as JobInput;
-  // A modest workspace limit constrains accidental or automated job creation.
-  // Operator-created jobs remain unrestricted for support and migration work.
-  if (ownerUserId && await repository.countJobsForOwner(ownerUserId) >= 20) {
-    throw new HttpError(429, 'This workspace has reached the 20-job limit. Contact us if you need more.');
-  }
   if (typeof input.job_key !== 'string' || !/^[a-z0-9][a-z0-9._-]{1,100}$/i.test(input.job_key)) {
     throw new HttpError(400, 'job_key must be 2–101 letters, numbers, dots, underscores, or hyphens.');
   }
@@ -56,6 +52,15 @@ export async function provisionJob(repository: PingStepD1Repository, rawInput: u
   const livenessGrace = nonNegativeInteger(input.liveness_grace_seconds, 'liveness_grace_seconds', 120);
   const expectedDuration = positiveInteger(input.expected_duration_seconds, 'expected_duration_seconds');
   const lateGrace = nonNegativeInteger(input.late_grace_seconds, 'late_grace_seconds');
+  if (ownerUserId) {
+    const policy = policyFor((await repository.getAccountPlan(ownerUserId, new Date().toISOString())).plan);
+    if (await repository.countJobsForOwner(ownerUserId) >= policy.maxJobs) {
+      throw new HttpError(402, `Your ${policy.label} plan allows ${policy.maxJobs} jobs. Upgrade at https://pingstep.dev/pricing.html to add more.`);
+    }
+    if ((interval ?? 60) < policy.minimumUpdateIntervalSeconds) {
+      throw new HttpError(400, `${policy.label} requires an expected update interval of at least ${policy.minimumUpdateIntervalSeconds} seconds.`);
+    }
+  }
   const token = createToken();
   const viewerToken = createViewerToken();
   await repository.createJob({
