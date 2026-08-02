@@ -22,6 +22,10 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     await requireOperator(request, env);
     return json({ runs: await new PingStepD1Repository(env.DB).listRuns() });
   }
+  if (request.method === 'GET' && url.pathname === '/v1/alerts') {
+    await requireOperator(request, env);
+    return json({ alerts: await new PingStepD1Repository(env.DB).listAlerts() });
+  }
   if (request.method === 'GET' && url.pathname === '/v1/operator/jobs') {
     await requireOperator(request, env);
     return json({ jobs: await new PingStepD1Repository(env.DB).listJobs() });

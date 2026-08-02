@@ -42,6 +42,19 @@ export type RunProjection = {
   terminal_conflict_json: string | null;
 };
 
+export type AlertRecord = {
+  id: string;
+  type: 'stale' | 'late';
+  job_key: string;
+  run_id: string;
+  status: string;
+  current_step: string | null;
+  message: string;
+  created_at: string;
+  delivery_status: 'pending' | 'delivered' | 'failed';
+  attempts: number;
+};
+
 /**
  * D1 persistence boundary. The Worker layer never builds SQL with request values:
  * every value is passed through a prepared-statement binding.
@@ -155,6 +168,41 @@ export class PingStepD1Repository {
       WHERE status = 'running' AND liveness_deadline IS NOT NULL AND liveness_deadline <= ?
     `).bind(now, now).run();
     return result.meta.changes;
+  }
+
+  async listExpiredRuns(now: string): Promise<RunProjection[]> {
+    const result = await this.db.prepare(`
+      SELECT * FROM runs
+      WHERE status = 'running' AND liveness_deadline IS NOT NULL AND liveness_deadline <= ?
+    `).bind(now).all<RunProjection>();
+    return result.results;
+  }
+
+  async markRunStale(run: RunProjection, now: string): Promise<boolean> {
+    const result = await this.db.prepare(`
+      UPDATE runs SET status = 'stale', stale_at = ?, stale_transitions = stale_transitions + 1
+      WHERE job_key = ? AND run_id = ? AND status = 'running'
+    `).bind(now, run.job_key, run.run_id).run();
+    return result.meta.changes === 1;
+  }
+
+  async createAlert(alert: AlertRecord): Promise<void> {
+    await this.db.prepare(`
+      INSERT OR IGNORE INTO alerts (
+        id, type, job_key, run_id, status, current_step, message, created_at, delivery_status, attempts
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      alert.id, alert.type, alert.job_key, alert.run_id, alert.status, alert.current_step,
+      alert.message, alert.created_at, alert.delivery_status, alert.attempts
+    ).run();
+  }
+
+  async listAlerts(): Promise<AlertRecord[]> {
+    const result = await this.db.prepare(`
+      SELECT id, type, job_key, run_id, status, current_step, message, created_at, delivery_status, attempts
+      FROM alerts ORDER BY created_at DESC LIMIT 100
+    `).all<AlertRecord>();
+    return result.results;
   }
 
   async upsertRun(run: RunProjection): Promise<void> {

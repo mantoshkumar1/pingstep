@@ -122,6 +122,20 @@ export class HostedPingStepService {
   }
 
   async reconcile(): Promise<number> {
-    return this.repository.markExpiredRunsStale(this.now().toISOString());
+    const now = this.now().toISOString();
+    const expired = await this.repository.listExpiredRuns(now);
+    let changed = 0;
+    for (const run of expired) {
+      if (!await this.repository.markRunStale(run, now)) continue;
+      changed += 1;
+      await this.repository.createAlert({
+        id: `${run.job_key}:${run.run_id}:stale:${run.stale_transitions + 1}`,
+        type: 'stale', job_key: run.job_key, run_id: run.run_id, status: 'stale',
+        current_step: run.current_step,
+        message: 'No heartbeat or stage update arrived before the liveness deadline.',
+        created_at: now, delivery_status: 'pending', attempts: 0
+      });
+    }
+    return changed;
   }
 }
