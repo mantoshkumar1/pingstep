@@ -203,6 +203,23 @@ test('Stripe Checkout is server-created for the signed-in account and never trus
     assert.equal(params.get('line_items[0][price]'), 'price_pro');
     assert.equal(params.get('metadata[user_id]'), 'user-1');
     assert.equal(params.get('success_url'), 'https://pingstep.dev/app?checkout=success');
+    assert.equal(params.get('allow_promotion_codes'), null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Stripe Checkout only accepts promotion codes when the temporary server-side switch is enabled', async () => {
+  const originalFetch = globalThis.fetch;
+  const repository = new MemoryRepository();
+  let request: Request | null = null;
+  globalThis.fetch = async (input, init) => {
+    request = typeof input === 'string' ? new Request(input, init) : input as Request;
+    return Response.json({ url: 'https://checkout.stripe.com/c/pay_test' });
+  };
+  try {
+    await createCheckout({ ...billingEnv(), STRIPE_ALLOW_PROMOTION_CODES: 'true' } as Env, repository as unknown as PingStepD1Repository, { id: 'user-1', email: 'engineer@example.test' }, 'pro');
+    assert.equal(new URLSearchParams(await request?.text()).get('allow_promotion_codes'), 'true');
   } finally {
     globalThis.fetch = originalFetch;
   }
