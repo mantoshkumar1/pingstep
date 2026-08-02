@@ -46,6 +46,16 @@ PINGSTEP_DEMO_OUTCOME=error npm run demo
 
 This is a functional test only. It does not count as a real-job pilot integration.
 
+### One-command status gallery
+
+Do not test each state manually. This command shows **Active**, **Stale**, **Succeeded**, and **Failed** runs together in about 20 seconds:
+
+```sh
+npm run demo:gallery
+```
+
+Open the printed dashboard URL while it runs. The temporary demo server closes once the final state is printed.
+
 ### Run locally
 
 ```sh
