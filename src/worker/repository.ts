@@ -57,6 +57,27 @@ export class PingStepD1Repository {
     `).bind(jobKey).first<StoredJob>();
   }
 
+  async listJobs(): Promise<Omit<StoredJob, 'token_hash'>[]> {
+    const result = await this.db.prepare(`
+      SELECT job_key, expected_update_interval_seconds, liveness_grace_seconds,
+             expected_duration_seconds, late_grace_seconds
+      FROM jobs ORDER BY job_key ASC
+    `).all<Omit<StoredJob, 'token_hash'>>();
+    return result.results;
+  }
+
+  async createJob(job: StoredJob, now: string): Promise<void> {
+    await this.db.prepare(`
+      INSERT INTO jobs (
+        job_key, token_hash, expected_update_interval_seconds, liveness_grace_seconds,
+        expected_duration_seconds, late_grace_seconds, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      job.job_key, job.token_hash, job.expected_update_interval_seconds, job.liveness_grace_seconds,
+      job.expected_duration_seconds, job.late_grace_seconds, now, now
+    ).run();
+  }
+
   async getEvent(eventId: string): Promise<StoredEvent | null> {
     return this.db.prepare(`
       SELECT event_id, job_key, run_id, sequence, type, occurred_at, received_at, data_json, fingerprint
