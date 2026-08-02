@@ -12,6 +12,14 @@
     "hash-token": "node src/hash-token.js",
     "pilot-scorecard": "node bin/pilot-scorecard.js",
     "demo": "sh bin/demo-local.sh",
-    "demo:gallery": "sh bin/demo-status-gallery.sh"
+    "demo:gallery": "sh bin/demo-status-gallery.sh",
+    "worker:types": "wrangler types",
+    "worker:check": "tsc --noEmit",
+    "worker:dev": "wrangler dev --local",
+    "worker:deploy:dry-run": "wrangler deploy --dry-run"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "wrangler": "^4.118.0"
   }
 }
