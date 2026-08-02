@@ -7,6 +7,7 @@ import { deleteJob, provisionJob, rotateJobTokens } from './worker/operator.ts';
 import { deliverPendingAlerts } from './worker/alerts.ts';
 import { completeOAuth, currentAccount, requireAccount, requireSameOrigin, signOut, startOAuth } from './worker/accounts.ts';
 import { policyFor, rollingWindowStart, type PlanCode } from './worker/plans.ts';
+import { createCheckout, createPortal, handleStripeWebhook } from './worker/billing.ts';
 
 const json = (body: unknown, status = 200, headers: HeadersInit = {}) => Response.json(body, {
   status,
@@ -83,6 +84,19 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   if (request.method === 'POST' && url.pathname === '/v1/auth/signout') {
     requireSameOrigin(request);
     return json({ ok: true }, 200, { 'set-cookie': await signOut(request, new PingStepD1Repository(env.DB)) });
+  }
+  if (request.method === 'POST' && url.pathname === '/v1/billing/stripe/webhook') {
+    return handleStripeWebhook(request, env, new PingStepD1Repository(env.DB)).then(() => new Response(null, { status: 200 }));
+  }
+  if (request.method === 'POST' && url.pathname === '/v1/billing/checkout') {
+    requireSameOrigin(request);
+    const repository = new PingStepD1Repository(env.DB);
+    return json(await createCheckout(env, await requireAccount(request, repository), (await readJsonBody(request, MAX_CONTROL_BODY_BYTES) as { plan?: unknown }).plan));
+  }
+  if (request.method === 'POST' && url.pathname === '/v1/billing/portal') {
+    requireSameOrigin(request);
+    const repository = new PingStepD1Repository(env.DB);
+    return json(await createPortal(env, repository, await requireAccount(request, repository)));
   }
   if (request.method === 'GET' && url.pathname === '/') {
     return env.ASSETS.fetch(new Request(new URL('/landing.html', request.url), request));

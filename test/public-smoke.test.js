@@ -70,12 +70,17 @@ test('dashboard exposes confirmed token rotation, job deletion, and translation 
 });
 
 test('pricing keeps the trial small and the paid plans explicit', async () => {
-  const pricing = await publicFile('pricing.html');
+  const [pricing, workspace] = await Promise.all([publicFile('pricing.html'), publicFile('workspace.html')]);
   assert.match(pricing, /2 jobs/);
   assert.match(pricing, /10 runs in a rolling 30 days/);
   assert.match(pricing, /US\$12/);
   assert.match(pricing, /US\$39/);
-  assert.match(pricing, /Paid access is enabled after a payment request is confirmed/);
+  assert.match(pricing, /app\?upgrade=pro/);
+  assert.match(pricing, /app\?upgrade=team/);
+  assert.match(pricing, /automatically updates access after Stripe confirms/);
+  assert.match(workspace, /\/v1\/billing\/checkout/);
+  assert.match(workspace, /Manage billing/);
+  assert.match(workspace, /\/v1\/billing\/portal/);
 });
 
 test('contact page is ready for customer support and uses the clean public URL', async () => {
