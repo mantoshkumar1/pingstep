@@ -1,6 +1,6 @@
 import { type Account } from './accounts.ts';
 import { type PlanCode } from './plans.ts';
-import { PingStepD1Repository } from './repository.ts';
+import { type AccountPlan, PingStepD1Repository, type StoredBillingSubscription } from './repository.ts';
 import { HttpError } from './service.ts';
 
 type StripeConfig = { secretKey: string; webhookSecret: string; proPriceId: string; teamPriceId: string; publicOrigin: string };
@@ -68,10 +68,30 @@ async function readWebhookBody(request: Request): Promise<string> {
   return new TextDecoder().decode(bytes);
 }
 
-export async function createCheckout(env: Env, account: Account, requestedPlan: unknown): Promise<{ url: string }> {
+export function resolveBillingEntitlement(subscriptions: readonly Pick<StoredBillingSubscription, 'plan' | 'status' | 'current_period_end'>[], now: string): AccountPlan {
+  const nowMs = Date.parse(now);
+  const paid = subscriptions.filter((subscription) =>
+    (subscription.status === 'active' || subscription.status === 'trialing') &&
+    (!subscription.current_period_end || Date.parse(subscription.current_period_end) > nowMs)
+  );
+  if (paid.length === 0) return { plan: 'trial', active_until: null };
+  paid.sort((left, right) => {
+    const rightEnds = right.current_period_end ? Date.parse(right.current_period_end) : Number.POSITIVE_INFINITY;
+    const leftEnds = left.current_period_end ? Date.parse(left.current_period_end) : Number.POSITIVE_INFINITY;
+    if (rightEnds !== leftEnds) return rightEnds - leftEnds;
+    return (right.plan === 'team' ? 1 : 0) - (left.plan === 'team' ? 1 : 0);
+  });
+  return { plan: paid[0].plan, active_until: paid[0].current_period_end };
+}
+
+export async function createCheckout(env: Env, repository: PingStepD1Repository, account: Account, requestedPlan: unknown): Promise<{ url: string }> {
   if (requestedPlan !== 'pro' && requestedPlan !== 'team') throw new HttpError(400, 'Choose Pro or Team.');
   const settings = config(env);
   if (!settings) throw new HttpError(503, 'Billing is being configured. Please try again shortly.');
+  const existing = await repository.listBillingSubscriptionsForUser(account.id);
+  if (resolveBillingEntitlement(existing, new Date().toISOString()).plan !== 'trial') {
+    throw new HttpError(409, 'You already have an active paid plan. Use Manage billing to update it.');
+  }
   const params = new URLSearchParams({
     mode: 'subscription', customer_email: account.email, client_reference_id: account.id,
     success_url: new URL('/app?checkout=success', settings.publicOrigin).toString(),
@@ -102,7 +122,8 @@ async function syncSubscription(repository: PingStepD1Repository, settings: Stri
   const periodEnd = typeof subscription.current_period_end === 'number' ? new Date(subscription.current_period_end * 1000).toISOString() : null;
   const now = new Date().toISOString();
   await repository.upsertBillingSubscription({ stripe_subscription_id: id, user_id: owner, stripe_customer_id: customerId, plan, status, current_period_end: periodEnd, updated_at: now });
-  await repository.setAccountPlan(owner, status === 'active' || status === 'trialing' ? plan : 'trial', status === 'active' || status === 'trialing' ? periodEnd : null, now);
+  const entitlement = resolveBillingEntitlement(await repository.listBillingSubscriptionsForUser(owner), now);
+  await repository.setAccountPlan(owner, entitlement.plan, entitlement.active_until, now);
 }
 
 export async function handleStripeWebhook(request: Request, env: Env, repository: PingStepD1Repository): Promise<void> {

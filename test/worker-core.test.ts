@@ -3,9 +3,9 @@ import test from 'node:test';
 import { requireOperator, requireReadAccess } from '../src/worker/auth.ts';
 import { requireSameOrigin } from '../src/worker/accounts.ts';
 import { deleteJob, provisionJob, rotateJobTokens } from '../src/worker/operator.ts';
-import { type AccountPlan, type AlertRecord, type RunProjection, type StoredEvent, type StoredJob, PingStepD1Repository } from '../src/worker/repository.ts';
+import { type AccountPlan, type AlertRecord, type RunProjection, type StoredBillingSubscription, type StoredEvent, type StoredJob, PingStepD1Repository } from '../src/worker/repository.ts';
 import { HostedPingStepService, HttpError, type LifecycleEvent } from '../src/worker/service.ts';
-import { createCheckout } from '../src/worker/billing.ts';
+import { createCheckout, createPortal, handleStripeWebhook, resolveBillingEntitlement } from '../src/worker/billing.ts';
 
 const now = new Date('2026-08-02T00:00:00.000Z');
 
@@ -14,6 +14,18 @@ async function hash(value: string): Promise<string> {
   return Array.from(bytes).map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+async function stripeSignature(payload: string, secret: string): Promise<string> {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${payload}`)));
+  return `t=${timestamp},v1=${Array.from(signature).map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
+const billingEnv = () => ({
+  PUBLIC_ORIGIN: 'https://pingstep.dev', STRIPE_SECRET_KEY: 'sk_test_secret', STRIPE_WEBHOOK_SECRET: 'whsec_test_secret',
+  STRIPE_PRO_PRICE_ID: 'price_pro', STRIPE_TEAM_PRICE_ID: 'price_team'
+}) as Env;
+
 class MemoryRepository {
   jobs = new Map<string, StoredJob>();
   events = new Map<string, StoredEvent>();
@@ -21,6 +33,7 @@ class MemoryRepository {
   pending = new Map<string, string>();
   alerts: AlertRecord[] = [];
   accountPlan: AccountPlan = { plan: 'trial', active_until: null };
+  billingSubscriptions: StoredBillingSubscription[] = [];
 
   key(jobKey: string, runId: string) { return `${jobKey}/${runId}`; }
   async getJob(jobKey: string) { return this.jobs.get(jobKey) ?? null; }
@@ -47,6 +60,17 @@ class MemoryRepository {
   }
   async createAlert(alert: AlertRecord) { if (!this.alerts.some((item) => item.id === alert.id)) this.alerts.push(alert); }
   async getAccountPlan() { return this.accountPlan; }
+  async setAccountPlan(_userId: string, plan: AccountPlan['plan'], activeUntil: string | null) { this.accountPlan = { plan, active_until: activeUntil }; }
+  async listBillingSubscriptionsForUser(userId: string) { return this.billingSubscriptions.filter((subscription) => subscription.user_id === userId); }
+  async getBillingSubscription(subscriptionId: string) { return this.billingSubscriptions.find((subscription) => subscription.stripe_subscription_id === subscriptionId) ?? null; }
+  async getBillingSubscriptionForUser(userId: string) {
+    return this.billingSubscriptions.filter((subscription) => subscription.user_id === userId)
+      .sort((left, right) => (left.status === 'active' ? -1 : 0) - (right.status === 'active' ? -1 : 0) || right.updated_at.localeCompare(left.updated_at))[0] ?? null;
+  }
+  async upsertBillingSubscription(subscription: StoredBillingSubscription) {
+    const index = this.billingSubscriptions.findIndex((item) => item.stripe_subscription_id === subscription.stripe_subscription_id);
+    if (index === -1) this.billingSubscriptions.push(subscription); else this.billingSubscriptions[index] = subscription;
+  }
   async countRunsForOwnerSince() { return 0; }
   async countJobsForOwner() { return [...this.jobs.values()].filter((job) => job.owner_user_id === 'user-1').length; }
   async createJob(job: StoredJob) { this.jobs.set(job.job_key, job); }
@@ -163,17 +187,14 @@ test('write endpoints reject cross-site browser requests', () => {
 
 test('Stripe Checkout is server-created for the signed-in account and never trusts a browser price', async () => {
   const originalFetch = globalThis.fetch;
+  const repository = new MemoryRepository();
   let request: Request | null = null;
   globalThis.fetch = async (input, init) => {
     request = typeof input === 'string' ? new Request(input, init) : input as Request;
     return Response.json({ url: 'https://checkout.stripe.com/c/pay_test' });
   };
   try {
-    const env = {
-      PUBLIC_ORIGIN: 'https://pingstep.dev', STRIPE_SECRET_KEY: 'sk_test_secret', STRIPE_WEBHOOK_SECRET: 'whsec_test_secret',
-      STRIPE_PRO_PRICE_ID: 'price_pro', STRIPE_TEAM_PRICE_ID: 'price_team'
-    } as Env;
-    const checkout = await createCheckout(env, { id: 'user-1', email: 'engineer@example.test' }, 'pro');
+    const checkout = await createCheckout(billingEnv(), repository as unknown as PingStepD1Repository, { id: 'user-1', email: 'engineer@example.test' }, 'pro');
     assert.equal(checkout.url, 'https://checkout.stripe.com/c/pay_test');
     assert.equal(request?.url, 'https://api.stripe.com/v1/checkout/sessions');
     assert.equal(request?.headers.get('authorization'), 'Bearer sk_test_secret');
@@ -182,6 +203,112 @@ test('Stripe Checkout is server-created for the signed-in account and never trus
     assert.equal(params.get('line_items[0][price]'), 'price_pro');
     assert.equal(params.get('metadata[user_id]'), 'user-1');
     assert.equal(params.get('success_url'), 'https://pingstep.dev/app?checkout=success');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('a failed second checkout cannot revoke an existing paid entitlement', () => {
+  const entitlement = resolveBillingEntitlement([
+    { plan: 'pro', status: 'active', current_period_end: '2026-09-02T00:00:00.000Z' },
+    { plan: 'team', status: 'incomplete', current_period_end: null }
+  ], '2026-08-02T00:00:00.000Z');
+  assert.deepEqual(entitlement, { plan: 'pro', active_until: '2026-09-02T00:00:00.000Z' });
+});
+
+test('billing entitlement ignores expired access and consistently chooses the higher paid plan on equal renewal dates', () => {
+  assert.deepEqual(resolveBillingEntitlement([
+    { plan: 'pro', status: 'active', current_period_end: '2026-08-01T23:59:59.000Z' },
+    { plan: 'team', status: 'trialing', current_period_end: '2026-09-02T00:00:00.000Z' },
+    { plan: 'pro', status: 'active', current_period_end: '2026-09-02T00:00:00.000Z' }
+  ], '2026-08-02T00:00:00.000Z'), { plan: 'team', active_until: '2026-09-02T00:00:00.000Z' });
+});
+
+test('billing rejects unavailable configuration and Stripe checkout failures without creating a link', async () => {
+  const repository = new MemoryRepository();
+  await assert.rejects(() => createCheckout({ PUBLIC_ORIGIN: 'https://pingstep.dev' } as Env, repository as unknown as PingStepD1Repository, { id: 'user-1', email: 'engineer@example.test' }, 'pro'), (error: HttpError) => error.status === 503);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: { message: 'declined' } }), { status: 402, headers: { 'content-type': 'application/json' } });
+  try {
+    await assert.rejects(() => createCheckout(billingEnv(), repository as unknown as PingStepD1Repository, { id: 'user-1', email: 'engineer@example.test' }, 'pro'), (error: HttpError) => error.status === 502);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('an account with paid access cannot start a second checkout', async () => {
+  const repository = new MemoryRepository();
+  repository.billingSubscriptions.push({ stripe_subscription_id: 'sub_active', user_id: 'user-1', stripe_customer_id: 'cus_active', plan: 'pro', status: 'active', current_period_end: '2026-09-02T00:00:00.000Z', updated_at: '2026-08-02T00:00:00.000Z' });
+  await assert.rejects(() => createCheckout(billingEnv(), repository as unknown as PingStepD1Repository, { id: 'user-1', email: 'engineer@example.test' }, 'team'), (error: HttpError) => error.status === 409);
+});
+
+test('a signed failed checkout preserves an earlier active paid plan', async () => {
+  const repository = new MemoryRepository();
+  repository.billingSubscriptions.push({ stripe_subscription_id: 'sub_pro', user_id: 'user-1', stripe_customer_id: 'cus_pro', plan: 'pro', status: 'active', current_period_end: '2026-09-02T00:00:00.000Z', updated_at: '2026-08-02T00:00:00.000Z' });
+  repository.accountPlan = { plan: 'pro', active_until: '2026-09-02T00:00:00.000Z' };
+  const payload = JSON.stringify({ type: 'customer.subscription.created', data: { object: { id: 'sub_team_failed' } } });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ id: 'sub_team_failed', customer: 'cus_team', status: 'incomplete', current_period_end: 1788307200, metadata: { user_id: 'user-1' }, items: { data: [{ price: { id: 'price_team' } }] } });
+  try {
+    await handleStripeWebhook(new Request('https://pingstep.dev/v1/billing/stripe/webhook', { method: 'POST', headers: { 'stripe-signature': await stripeSignature(payload, 'whsec_test_secret') }, body: payload }), billingEnv(), repository as unknown as PingStepD1Repository);
+    assert.deepEqual(repository.accountPlan, { plan: 'pro', active_until: '2026-09-02T00:00:00.000Z' });
+    assert.equal(repository.billingSubscriptions.length, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('a signed terminal subscription event removes access when no paid subscription remains', async () => {
+  const repository = new MemoryRepository();
+  const payload = JSON.stringify({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_cancelled' } } });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ id: 'sub_cancelled', customer: 'cus_cancelled', status: 'canceled', current_period_end: 1788307200, metadata: { user_id: 'user-1' }, items: { data: [{ price: { id: 'price_pro' } }] } });
+  try {
+    await handleStripeWebhook(new Request('https://pingstep.dev/v1/billing/stripe/webhook', { method: 'POST', headers: { 'stripe-signature': await stripeSignature(payload, 'whsec_test_secret') }, body: payload }), billingEnv(), repository as unknown as PingStepD1Repository);
+    assert.deepEqual(repository.accountPlan, { plan: 'trial', active_until: null });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('webhook rejects unsigned, malformed, and oversized payloads before changing billing state', async () => {
+  const repository = new MemoryRepository();
+  const unsigned = new Request('https://pingstep.dev/v1/billing/stripe/webhook', { method: 'POST', body: '{}' });
+  await assert.rejects(() => handleStripeWebhook(unsigned, billingEnv(), repository as unknown as PingStepD1Repository), (error: HttpError) => error.status === 400);
+  const malformed = '{';
+  const malformedSignature = await stripeSignature(malformed, 'whsec_test_secret');
+  await assert.rejects(() => handleStripeWebhook(new Request('https://pingstep.dev/v1/billing/stripe/webhook', { method: 'POST', headers: { 'stripe-signature': malformedSignature }, body: malformed }), billingEnv(), repository as unknown as PingStepD1Repository), (error: HttpError) => error.status === 400);
+  const oversized = new Request('https://pingstep.dev/v1/billing/stripe/webhook', { method: 'POST', headers: { 'content-length': '65537' }, body: '{}' });
+  await assert.rejects(() => handleStripeWebhook(oversized, billingEnv(), repository as unknown as PingStepD1Repository), (error: HttpError) => error.status === 413);
+  assert.equal(repository.billingSubscriptions.length, 0);
+});
+
+test('a completed Stripe checkout uses the checkout owner when its subscription is retrieved', async () => {
+  const repository = new MemoryRepository();
+  const payload = JSON.stringify({ type: 'checkout.session.completed', data: { object: { subscription: 'sub_checkout', client_reference_id: 'user-1' } } });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ id: 'sub_checkout', customer: 'cus_checkout', status: 'active', current_period_end: 1788307200, metadata: {}, items: { data: [{ price: { id: 'price_pro' } }] } });
+  try {
+    await handleStripeWebhook(new Request('https://pingstep.dev/v1/billing/stripe/webhook', { method: 'POST', headers: { 'stripe-signature': await stripeSignature(payload, 'whsec_test_secret') }, body: payload }), billingEnv(), repository as unknown as PingStepD1Repository);
+    assert.deepEqual(repository.accountPlan, { plan: 'pro', active_until: '2026-09-02T00:00:00.000Z' });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('the billing portal selects the active subscription over a newer incomplete one', async () => {
+  const repository = new MemoryRepository();
+  repository.billingSubscriptions.push(
+    { stripe_subscription_id: 'sub_active', user_id: 'user-1', stripe_customer_id: 'cus_active', plan: 'pro', status: 'active', current_period_end: '2026-09-02T00:00:00.000Z', updated_at: '2026-08-02T00:00:00.000Z' },
+    { stripe_subscription_id: 'sub_failed', user_id: 'user-1', stripe_customer_id: 'cus_failed', plan: 'team', status: 'incomplete', current_period_end: null, updated_at: '2026-08-02T00:05:00.000Z' }
+  );
+  const originalFetch = globalThis.fetch;
+  let request: Request | null = null;
+  globalThis.fetch = async (input, init) => { request = typeof input === 'string' ? new Request(input, init) : input as Request; return Response.json({ url: 'https://billing.stripe.com/p/session/test_portal' }); };
+  try {
+    const portal = await createPortal(billingEnv(), repository as unknown as PingStepD1Repository, { id: 'user-1', email: 'engineer@example.test' });
+    assert.equal(portal.url, 'https://billing.stripe.com/p/session/test_portal');
+    assert.equal(new URLSearchParams(await request?.text()).get('customer'), 'cus_active');
   } finally {
     globalThis.fetch = originalFetch;
   }

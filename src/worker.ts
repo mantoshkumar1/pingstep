@@ -91,7 +91,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   if (request.method === 'POST' && url.pathname === '/v1/billing/checkout') {
     requireSameOrigin(request);
     const repository = new PingStepD1Repository(env.DB);
-    return json(await createCheckout(env, await requireAccount(request, repository), (await readJsonBody(request, MAX_CONTROL_BODY_BYTES) as { plan?: unknown }).plan));
+    return json(await createCheckout(env, repository, await requireAccount(request, repository), (await readJsonBody(request, MAX_CONTROL_BODY_BYTES) as { plan?: unknown }).plan));
   }
   if (request.method === 'POST' && url.pathname === '/v1/billing/portal') {
     requireSameOrigin(request);
