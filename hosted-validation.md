@@ -8,6 +8,8 @@
 2. D1 persisted the final projection as `succeeded`, with `Complete` as the current stage and `succeeded` as the terminal event type.
 3. A separate synthetic job stopped reporting after `started`.
 4. The deployed once-per-minute scheduled reconciliation changed that run to `stale` exactly once.
+5. A synthetic `Error` run persisted as `failed / Error`.
+6. A synthetic `Terminated` run persisted as `failed / Terminated`.
 
 ## Product boundary
 
