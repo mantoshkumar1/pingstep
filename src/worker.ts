@@ -4,6 +4,7 @@ import { PingStepD1Repository } from './worker/repository';
 import { HostedPingStepService, HttpError } from './worker/service';
 import { requireOperator } from './worker/auth';
 import { provisionJob } from './worker/operator';
+import { deliverPendingAlerts } from './worker/alerts';
 
 const json = (body: unknown, status = 200) => Response.json(body, {
   status,
@@ -78,7 +79,9 @@ export default {
 
   async scheduled(_controller, env): Promise<void> {
     // Instantiated per invocation: no mutable request state is global.
-    const changed = await new HostedPingStepService(new PingStepD1Repository(env.DB)).reconcile();
-    console.log(JSON.stringify({ event: 'scheduled_reconcile', stale_runs_marked: changed }));
+    const repository = new PingStepD1Repository(env.DB);
+    const changed = await new HostedPingStepService(repository).reconcile();
+    const delivered = await deliverPendingAlerts(repository, env);
+    console.log(JSON.stringify({ event: 'scheduled_reconcile', stale_runs_marked: changed, alerts_delivered: delivered }));
   }
 } satisfies ExportedHandler<Env>;
