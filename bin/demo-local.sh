@@ -5,9 +5,15 @@ set -eu
 PORT="${PINGSTEP_DEMO_PORT:-3000}"
 RUN_SECONDS="${PINGSTEP_DEMO_RUN_SECONDS:-60}"
 JOB_KEY="${PINGSTEP_DEMO_JOB_KEY:-laptop-sim}"
+JOBS="${PINGSTEP_DEMO_JOBS:-1}"
 DEMO_DIR="${TMPDIR:-/tmp}/pingstep-demo-$$"
 TOKEN="pingstep-demo-$(node -e 'console.log(require("crypto").randomBytes(18).toString("hex"))')"
 TOKEN_HASH="$(npm run --silent hash-token -- "$TOKEN")"
+
+case "$JOBS" in
+  ''|*[!0-9]*) echo "PINGSTEP_DEMO_JOBS must be a positive integer." >&2; exit 1 ;;
+esac
+if [ "$JOBS" -lt 1 ]; then echo "PINGSTEP_DEMO_JOBS must be at least 1." >&2; exit 1; fi
 
 cleanup() {
   if [ -n "${SERVER_PID:-}" ]; then kill "$SERVER_PID" 2>/dev/null || true; fi
@@ -17,8 +23,18 @@ trap cleanup EXIT INT TERM
 mkdir -p "$DEMO_DIR"
 
 export PINGSTEP_DATA_FILE="$DEMO_DIR/pingstep.json"
-export PINGSTEP_JOB_TOKEN_HASHES_JSON="{\"$JOB_KEY\":\"$TOKEN_HASH\"}"
-export PINGSTEP_JOB_CONFIG_JSON="{\"$JOB_KEY\":{\"expected_update_interval_seconds\":600,\"expected_duration_seconds\":$RUN_SECONDS,\"late_grace_seconds\":0}}"
+TOKEN_ENTRIES=""
+CONFIG_ENTRIES=""
+for index in $(seq 1 "$JOBS"); do
+  key="$JOB_KEY-$index"
+  if [ "$JOBS" -eq 1 ]; then key="$JOB_KEY"; fi
+  separator=""
+  if [ "$index" -gt 1 ]; then separator=","; fi
+  TOKEN_ENTRIES="$TOKEN_ENTRIES$separator\"$key\":\"$TOKEN_HASH\""
+  CONFIG_ENTRIES="$CONFIG_ENTRIES$separator\"$key\":{\"expected_update_interval_seconds\":600,\"expected_duration_seconds\":$RUN_SECONDS,\"late_grace_seconds\":0}"
+done
+export PINGSTEP_JOB_TOKEN_HASHES_JSON="{$TOKEN_ENTRIES}"
+export PINGSTEP_JOB_CONFIG_JSON="{$CONFIG_ENTRIES}"
 export PINGSTEP_URL="http://localhost:$PORT"
 export PINGSTEP_TOKEN="$TOKEN"
 
@@ -34,7 +50,14 @@ if ! curl -fsS "$PINGSTEP_URL/health" >/dev/null 2>&1; then
 fi
 
 echo "PingStep dashboard: $PINGSTEP_URL"
-echo "Running $RUN_SECONDS-second local simulation for $JOB_KEY..."
-python3 examples/simulate_statuses.py --job-key "$JOB_KEY" --run-seconds "$RUN_SECONDS"
+echo "Running $JOBS parallel $RUN_SECONDS-second local simulation(s)..."
+PIDS=""
+for index in $(seq 1 "$JOBS"); do
+  key="$JOB_KEY-$index"
+  if [ "$JOBS" -eq 1 ]; then key="$JOB_KEY"; fi
+  python3 examples/simulate_statuses.py --job-key "$key" --run-seconds "$RUN_SECONDS" &
+  PIDS="$PIDS $!"
+done
+for pid in $PIDS; do wait "$pid"; done
 echo "\nFinal run state:"
 curl -fsS "$PINGSTEP_URL/v1/runs"

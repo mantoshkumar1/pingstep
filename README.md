@@ -38,6 +38,7 @@ Useful variations:
 PINGSTEP_DEMO_RUN_SECONDS=20 npm run demo  # quicker smoke test
 PINGSTEP_DEMO_RUN_SECONDS=1200 npm run demo  # 20-minute test
 PINGSTEP_DEMO_PORT=3010 npm run demo
+PINGSTEP_DEMO_JOBS=2 npm run demo  # two independent jobs in parallel
 ```
 
 This is a functional test only. It does not count as a real-job pilot integration.

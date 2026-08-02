@@ -7,6 +7,7 @@ export class FileStore {
   constructor(path) {
     this.path = path;
     this.data = emptyData();
+    this.writeQueue = Promise.resolve();
   }
 
   async load() {
@@ -26,9 +27,12 @@ export class FileStore {
   }
 
   async persist() {
-    await mkdir(dirname(this.path), { recursive: true });
-    const temporaryPath = `${this.path}.tmp`;
-    await writeFile(temporaryPath, `${JSON.stringify(this.data, null, 2)}\n`, { mode: 0o600 });
-    await rename(temporaryPath, this.path);
+    this.writeQueue = this.writeQueue.catch(() => {}).then(async () => {
+      await mkdir(dirname(this.path), { recursive: true });
+      const temporaryPath = `${this.path}.tmp`;
+      await writeFile(temporaryPath, `${JSON.stringify(this.data, null, 2)}\n`, { mode: 0o600 });
+      await rename(temporaryPath, this.path);
+    });
+    return this.writeQueue;
   }
 }
