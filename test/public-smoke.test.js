@@ -69,8 +69,8 @@ test('dashboard exposes confirmed token rotation, job deletion, and translation 
   assert.match(workspace, /Intl\.DateTimeFormat\(PingStepI18n\.current\(\)/);
 });
 
-test('pricing keeps the trial small and the paid plans, plan changes, and refunds explicit', async () => {
-  const [pricing, terms, workspace] = await Promise.all([publicFile('pricing.html'), publicFile('terms.html'), publicFile('workspace.html')]);
+test('pricing keeps the trial small and the paid plans, plan changes, and self-service policy explicit', async () => {
+  const [pricing, terms, contact, workspace] = await Promise.all([publicFile('pricing.html'), publicFile('terms.html'), publicFile('contact.html'), publicFile('workspace.html')]);
   assert.match(pricing, /2 jobs/);
   assert.match(pricing, /10 runs in a rolling 30 days/);
   assert.match(pricing, /US\$12/);
@@ -80,9 +80,12 @@ test('pricing keeps the trial small and the paid plans, plan changes, and refund
   assert.match(pricing, /automatically updates access after Stripe confirms/);
   assert.match(pricing, /Upgrades take effect immediately and Stripe charges the prorated difference/);
   assert.match(pricing, /unused paid value becomes a Stripe credit toward future invoices/);
-  assert.match(pricing, /does not issue automatic cash refunds for plan changes/);
+  assert.match(pricing, /does not provide manual plan changes or cash refunds for plan changes/);
   assert.match(terms, /Billing, plan changes, and refunds/);
-  assert.match(terms, /duplicate charges, billing errors, or exceptional circumstances/);
+  assert.match(terms, /does not provide manual plan changes or cash refunds for plan changes/);
+  assert.match(terms, /rights that cannot be waived under applicable law/);
+  assert.match(contact, /Self-service account and billing/);
+  assert.match(contact, /Use Manage billing to update payment methods, download invoices, change plans, or cancel/);
   assert.match(workspace, /\/v1\/billing\/checkout/);
   assert.match(workspace, /Manage billing/);
   assert.match(workspace, /\/v1\/billing\/portal/);
@@ -90,14 +93,15 @@ test('pricing keeps the trial small and the paid plans, plan changes, and refund
   assert.match(workspace, /\$\('billing-message'\)\.textContent=error\.message/);
 });
 
-test('contact page is ready for customer support and uses the clean public URL', async () => {
+test('contact page directs routine billing to self-service and uses the clean public URL', async () => {
   const [contact, worker, server] = await Promise.all([
     publicFile('contact.html'),
     readFile(new URL('../src/worker.ts', import.meta.url), 'utf8'),
     readFile(new URL('../test/e2e-server.mjs', import.meta.url), 'utf8')
   ]);
   assert.match(contact, /https:\/\/pingstep\.dev\/contact/);
-  assert.match(contact, /Support and billing/);
+  assert.match(contact, /Self-service account and billing/);
+  assert.match(contact, /does not provide manual plan changes or cash refunds for plan changes/);
   assert.match(contact, /PingStep deletion request/);
   assert.match(contact, /Do not send tokens, credentials, raw logs, or personal data/);
   assert.match(worker, /url\.pathname === '\/contact'/);
