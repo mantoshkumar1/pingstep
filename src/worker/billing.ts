@@ -3,7 +3,7 @@ import { type PlanCode } from './plans.ts';
 import { type AccountPlan, PingStepD1Repository, type StoredBillingSubscription } from './repository.ts';
 import { HttpError } from './service.ts';
 
-type StripeConfig = { secretKey: string; webhookSecret: string; proPriceId: string; teamPriceId: string; publicOrigin: string };
+type StripeConfig = { secretKey: string; webhookSecret: string; proPriceId: string; teamPriceId: string; publicOrigin: string; allowPromotionCodes: boolean };
 type StripeSubscription = { id?: unknown; customer?: unknown; status?: unknown; current_period_end?: unknown; metadata?: { user_id?: unknown }; items?: { data?: Array<{ price?: { id?: unknown } }> } };
 type StripeEvent = { type?: unknown; data?: { object?: Record<string, unknown> } };
 const encoder = new TextEncoder();
@@ -19,7 +19,9 @@ function config(env: Env): StripeConfig | null {
   const webhookSecret = setting(env, 'STRIPE_WEBHOOK_SECRET');
   const proPriceId = setting(env, 'STRIPE_PRO_PRICE_ID');
   const teamPriceId = setting(env, 'STRIPE_TEAM_PRICE_ID');
-  return secretKey && webhookSecret && proPriceId && teamPriceId ? { secretKey, webhookSecret, proPriceId, teamPriceId, publicOrigin: env.PUBLIC_ORIGIN } : null;
+  return secretKey && webhookSecret && proPriceId && teamPriceId
+    ? { secretKey, webhookSecret, proPriceId, teamPriceId, publicOrigin: env.PUBLIC_ORIGIN, allowPromotionCodes: setting(env, 'STRIPE_ALLOW_PROMOTION_CODES') === 'true' }
+    : null;
 }
 
 const hex = (bytes: Uint8Array) => Array.from(bytes).map((byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -111,6 +113,7 @@ export async function createCheckout(env: Env, repository: PingStepD1Repository,
     'line_items[0][price]': priceFor(requestedPlan, settings), 'line_items[0][quantity]': '1',
     'metadata[user_id]': account.id, 'subscription_data[metadata][user_id]': account.id
   });
+  if (settings.allowPromotionCodes) params.set('allow_promotion_codes', 'true');
   const session = await stripe(settings, '/v1/checkout/sessions', params);
   if (typeof session.url !== 'string' || !session.url.startsWith('https://')) throw new HttpError(502, 'Payment service returned an invalid checkout link.');
   return { url: session.url };
