@@ -278,6 +278,11 @@ export class PingStepD1Repository {
     return result.meta.changes === 1;
   }
 
+  async deleteExpiredOAuthStates(now: string): Promise<number> {
+    const result = await this.db.prepare('DELETE FROM oauth_states WHERE expires_at <= ?').bind(now).run();
+    return result.meta.changes;
+  }
+
   async createSession(session: Omit<StoredSession, 'email'>): Promise<void> {
     await this.db.prepare(`
       INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)
@@ -294,6 +299,17 @@ export class PingStepD1Repository {
 
   async deleteSessionByTokenHash(tokenHash: string): Promise<void> {
     await this.db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(tokenHash).run();
+  }
+
+  async deleteExpiredSessions(now: string): Promise<number> {
+    const result = await this.db.prepare('DELETE FROM sessions WHERE expires_at <= ?').bind(now).run();
+    return result.meta.changes;
+  }
+
+  async expirePendingEvents(now: string): Promise<number> {
+    const result = await this.db.prepare('UPDATE pending_events SET expired_at = ? WHERE expired_at IS NULL AND expires_at <= ?')
+      .bind(now, now).run();
+    return result.meta.changes;
   }
 
   async markExpiredRunsStale(now: string): Promise<number> {

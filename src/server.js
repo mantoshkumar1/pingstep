@@ -22,6 +22,7 @@ const alertChannel = new WebhookAlertChannel({
   token: process.env.PINGSTEP_ALERT_WEBHOOK_TOKEN
 });
 const evaluatorIntervalMs = Math.max(1000, Number(process.env.PINGSTEP_EVALUATOR_INTERVAL_MS ?? 60 * 1000));
+const MAX_EVENT_BODY_BYTES = 64 * 1024;
 const dashboardHtml = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 
 async function evaluateRuns() {
@@ -64,8 +65,17 @@ const server = createServer(async (request, response) => {
       return run ? send(response, 200, { run }) : send(response, 404, { error: 'Run not found.' });
     }
     if (request.method === 'POST' && url.pathname === '/v1/events') {
+      const contentLength = Number(request.headers['content-length'] ?? 0);
+      if (!Number.isFinite(contentLength) || contentLength > MAX_EVENT_BODY_BYTES) {
+        return send(response, 413, { error: 'Request body is too large.' });
+      }
       let raw = '';
-      for await (const chunk of request) raw += chunk;
+      let received = 0;
+      for await (const chunk of request) {
+        received += chunk.length;
+        if (received <= MAX_EVENT_BODY_BYTES) raw += chunk;
+      }
+      if (received > MAX_EVENT_BODY_BYTES) return send(response, 413, { error: 'Request body is too large.' });
       const token = request.headers.authorization?.replace(/^Bearer\s+/i, '');
       const result = await service.ingest(JSON.parse(raw), token);
       return send(response, result.duplicate ? 200 : 202, result);

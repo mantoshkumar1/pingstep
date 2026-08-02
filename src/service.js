@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 
 const EVENT_TYPES = new Set(['started', 'step', 'heartbeat', 'succeeded', 'failed']);
 const TERMINAL_TYPES = new Set(['succeeded', 'failed']);
@@ -81,7 +81,9 @@ export class PingStepService {
   }
 
   authorize(jobKey, token) {
-    if (!token || this.tokenHashesByJob[jobKey] !== hashToken(token)) {
+    const expected = this.tokenHashesByJob[jobKey];
+    const supplied = token ? hashToken(token) : '';
+    if (!expected || !token || expected.length !== supplied.length || !timingSafeEqual(Buffer.from(expected), Buffer.from(supplied))) {
       const error = new Error('Invalid token for job_key.');
       error.code = 'UNAUTHORIZED';
       throw error;

@@ -78,7 +78,7 @@ async function main() {
   const type = command === 'start' ? 'started' : command;
   const event = { event_id: randomUUID(), job_key: jobKey, run_id: runId, sequence, type, occurred_at: new Date().toISOString(), data };
   const endpoint = new URL('/v1/events', url);
-  const response = await fetch(endpoint, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(event) });
+  const response = await fetch(endpoint, { method: 'POST', signal: AbortSignal.timeout(15_000), headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(event) });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error ?? `PingStep returned HTTP ${response.status}.`);
   console.log(JSON.stringify({ run_id: runId, sequence, type, accepted: !result.duplicate }));
