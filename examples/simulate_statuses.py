@@ -38,7 +38,7 @@ def main():
         parser.error("--run-seconds must leave at least one second after Queue and Staging.")
     base_url, token = os.environ.get("PINGSTEP_URL"), os.environ.get("PINGSTEP_TOKEN")
     if not base_url or not token:
-        parser.error("PINGSTEP_URL and PINGSTEP_TOKEN must be set.")
+        parser.error("PINGSTEP_URL and PINGSTEP_TOKEN must be set. For the zero-config local test, run: npm run demo")
 
     run_id = str(uuid.uuid4())
     if args.progress_seconds < 1:
