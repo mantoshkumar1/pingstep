@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Map a local PACE job-status command to explicit PingStep state events.
 
-This adapter intentionally emits only when PACE's reported state changes. It does
-not treat repeated `Running` responses as a heartbeat: that would prove the poller
-is alive, not that the PACE job is making progress.
+This adapter emits a heartbeat for each successful PACE poll while a state is
+unchanged. That proves PingStep can still see PACE; it does *not* claim the PACE
+job is progressing. A long-running `Running` job should be configured with an
+expected duration so PingStep marks it late rather than falsely calling it stuck.
 """
 import argparse
 import json
@@ -63,6 +64,10 @@ def main():
             previous = state
             if state in TERMINAL:
                 return
+        else:
+            sequence += 1
+            send(url, token, {"event_id": str(uuid.uuid4()), "job_key": args.job_key, "run_id": run_id, "sequence": sequence, "type": "heartbeat", "occurred_at": now(), "data": {}})
+            print(f"{now()} {state} -> heartbeat (PACE reachable; progress unknown)", flush=True)
         time.sleep(args.poll_seconds)
 
 
