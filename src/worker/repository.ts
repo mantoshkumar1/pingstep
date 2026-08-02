@@ -122,6 +122,11 @@ export class PingStepD1Repository {
       .bind(jobKey, runId).first<RunProjection>();
   }
 
+  async listRuns(): Promise<RunProjection[]> {
+    const result = await this.db.prepare('SELECT * FROM runs ORDER BY received_at DESC LIMIT 100').all<RunProjection>();
+    return result.results;
+  }
+
   async upsertRun(run: RunProjection): Promise<void> {
     await this.db.prepare(`
       INSERT INTO runs (
