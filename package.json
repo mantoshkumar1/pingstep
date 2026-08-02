@@ -11,6 +11,7 @@
     "test": "node --test",
     "hash-token": "node src/hash-token.js",
     "pilot-scorecard": "node bin/pilot-scorecard.js",
-    "demo": "sh bin/demo-local.sh"
+    "demo": "sh bin/demo-local.sh",
+    "demo:gallery": "sh bin/demo-status-gallery.sh"
   }
 }
