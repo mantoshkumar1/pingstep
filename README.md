@@ -104,13 +104,15 @@ Install the package globally or invoke `node bin/pingstep.js` directly. The help
 
 ### PACE status adapter (local integration test)
 
-For a consenting internal PACE job, `examples/pace_adapter.py` can poll the local `pace -jobStatus -job_id` command and emit explicit PingStep state transitions. It intentionally does **not** emit heartbeats for repeated `Running` responses: that would only prove the poller works, not that the PACE job advances.
+For a consenting internal PACE job, `examples/pace_adapter.py` can poll the local `pace -jobStatus -job_id` command and emit explicit PingStep state transitions. On each successful repeated poll it emits a heartbeat. This means **stale** tells you the adapter can no longer see PACE; it does not mean repeated `Running` proves the PACE job is advancing. Configure an expected duration to surface a long-running `Running` job as **late**.
 
 ```sh
 export PINGSTEP_URL='http://localhost:3000'
 export PINGSTEP_TOKEN='your-job-token'
 python3 examples/pace_adapter.py --pace-job-id '<job-id>' --job-key pace-integration-test --poll-seconds 60
 ```
+
+For the hosted service, set `PINGSTEP_URL='https://pingstep.mantoshk234.workers.dev'`. Create the job and obtain its one-time job token through the operator endpoint first; use that token as `PINGSTEP_TOKEN`. For your roughly three-hour PACE workload, start with 60-second polls, a 120-second liveness grace, and an expected duration of 10,800 seconds plus a 1,800-second late grace. That makes loss of PACE visibility stale after roughly three minutes, while an observed `Running` job becomes late after 3.5 hours.
 
 Use only a non-sensitive test job. The adapter sends no Jenkins logs or PACE output to PingStep; it sends only the recognized state transition. A deliberately shortened 20-minute PACE run is valid technical-integration evidence, but does not change the pilot’s normal 20–90 minute target-user screen if the real workload normally runs longer.
 
