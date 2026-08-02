@@ -69,8 +69,8 @@ test('dashboard exposes confirmed token rotation, job deletion, and translation 
   assert.match(workspace, /Intl\.DateTimeFormat\(PingStepI18n\.current\(\)/);
 });
 
-test('pricing keeps the trial small and the paid plans explicit', async () => {
-  const [pricing, workspace] = await Promise.all([publicFile('pricing.html'), publicFile('workspace.html')]);
+test('pricing keeps the trial small and the paid plans, plan changes, and refunds explicit', async () => {
+  const [pricing, terms, workspace] = await Promise.all([publicFile('pricing.html'), publicFile('terms.html'), publicFile('workspace.html')]);
   assert.match(pricing, /2 jobs/);
   assert.match(pricing, /10 runs in a rolling 30 days/);
   assert.match(pricing, /US\$12/);
@@ -78,6 +78,11 @@ test('pricing keeps the trial small and the paid plans explicit', async () => {
   assert.match(pricing, /app\?upgrade=pro/);
   assert.match(pricing, /app\?upgrade=team/);
   assert.match(pricing, /automatically updates access after Stripe confirms/);
+  assert.match(pricing, /Upgrades take effect immediately and Stripe charges the prorated difference/);
+  assert.match(pricing, /unused paid value becomes a Stripe credit toward future invoices/);
+  assert.match(pricing, /does not issue automatic cash refunds for plan changes/);
+  assert.match(terms, /Billing, plan changes, and refunds/);
+  assert.match(terms, /duplicate charges, billing errors, or exceptional circumstances/);
   assert.match(workspace, /\/v1\/billing\/checkout/);
   assert.match(workspace, /Manage billing/);
   assert.match(workspace, /\/v1\/billing\/portal/);
