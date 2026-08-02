@@ -5,10 +5,11 @@ import { HostedPingStepService, HttpError } from './worker/service';
 import { requireOperator, requireReadAccess } from './worker/auth';
 import { provisionJob } from './worker/operator';
 import { deliverPendingAlerts } from './worker/alerts';
+import { currentAccount, requireAccount, requireSameOrigin, signIn, signOut, signUp } from './worker/accounts';
 
-const json = (body: unknown, status = 200) => Response.json(body, {
+const json = (body: unknown, status = 200, headers: HeadersInit = {}) => Response.json(body, {
   status,
-  headers: { 'cache-control': 'no-store' }
+  headers: { 'cache-control': 'no-store', ...headers }
 });
 
 async function handleRequest(request: Request, env: Env): Promise<Response> {
@@ -19,14 +20,33 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   if (request.method === 'GET' && url.pathname === '/health') {
     return json({ status: 'ok', storage: 'd1' });
   }
+  if (request.method === 'GET' && url.pathname === '/v1/auth/me') {
+    return json({ user: await currentAccount(request, new PingStepD1Repository(env.DB)) });
+  }
+  if (request.method === 'POST' && url.pathname === '/v1/auth/signup') {
+    requireSameOrigin(request);
+    const result = await signUp(new PingStepD1Repository(env.DB), await request.json());
+    return json({ user: result.user }, 201, { 'set-cookie': result.cookie });
+  }
+  if (request.method === 'POST' && url.pathname === '/v1/auth/signin') {
+    requireSameOrigin(request);
+    const result = await signIn(new PingStepD1Repository(env.DB), await request.json());
+    return json({ user: result.user }, 200, { 'set-cookie': result.cookie });
+  }
+  if (request.method === 'POST' && url.pathname === '/v1/auth/signout') {
+    requireSameOrigin(request);
+    return json({ ok: true }, 200, { 'set-cookie': await signOut(request, new PingStepD1Repository(env.DB)) });
+  }
   if (request.method === 'GET' && url.pathname === '/') {
     return env.ASSETS.fetch(new Request(new URL('/landing.html', request.url), request));
   }
   if (request.method === 'GET' && url.pathname === '/app') {
-    return env.ASSETS.fetch(new Request(new URL('/index.html', request.url), request));
+    return env.ASSETS.fetch(new Request(new URL('/workspace.html', request.url), request));
   }
   if (request.method === 'GET' && url.pathname === '/v1/runs') {
     const repository = new PingStepD1Repository(env.DB);
+    const account = await currentAccount(request, repository);
+    if (account) return json({ runs: await repository.listRunsForOwner(account.id), role: 'user', user: { email: account.email } });
     const access = await requireReadAccess(request, env, repository);
     return json({
       runs: access.role === 'operator' ? await repository.listRuns() : await repository.listRunsForJob(access.jobKey),
@@ -45,14 +65,26 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     await requireOperator(request, env);
     return json(await provisionJob(new PingStepD1Repository(env.DB), await request.json()), 201);
   }
+  if (request.method === 'POST' && url.pathname === '/v1/jobs') {
+    requireSameOrigin(request);
+    const repository = new PingStepD1Repository(env.DB);
+    const account = await requireAccount(request, repository);
+    return json(await provisionJob(repository, await request.json(), account.id), 201);
+  }
   const runMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)$/);
   const eventsMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)\/events$/);
   if (request.method === 'GET' && eventsMatch) {
     const repository = new PingStepD1Repository(env.DB);
     const jobKey = decodeURIComponent(eventsMatch[1]);
     const runId = decodeURIComponent(eventsMatch[2]);
-    const access = await requireReadAccess(request, env, repository);
-    if (access.role === 'viewer' && access.jobKey !== jobKey) throw new HttpError(403, 'This viewer token cannot access that job.');
+    const account = await currentAccount(request, repository);
+    if (account) {
+      const job = await repository.getJob(jobKey);
+      if (!job || job.owner_user_id !== account.id) throw new HttpError(403, 'This account cannot access that job.');
+    } else {
+      const access = await requireReadAccess(request, env, repository);
+      if (access.role === 'viewer' && access.jobKey !== jobKey) throw new HttpError(403, 'This viewer token cannot access that job.');
+    }
     if (!await repository.getRun(jobKey, runId)) return json({ error: 'Run not found.' }, 404);
     const events = (await repository.listEventsForRun(jobKey, runId)).map((event) => ({
       ...event,
@@ -63,8 +95,14 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   if (request.method === 'GET' && runMatch) {
     const repository = new PingStepD1Repository(env.DB);
     const jobKey = decodeURIComponent(runMatch[1]);
-    const access = await requireReadAccess(request, env, repository);
-    if (access.role === 'viewer' && access.jobKey !== jobKey) throw new HttpError(403, 'This viewer token cannot access that job.');
+    const account = await currentAccount(request, repository);
+    if (account) {
+      const job = await repository.getJob(jobKey);
+      if (!job || job.owner_user_id !== account.id) throw new HttpError(403, 'This account cannot access that job.');
+    } else {
+      const access = await requireReadAccess(request, env, repository);
+      if (access.role === 'viewer' && access.jobKey !== jobKey) throw new HttpError(403, 'This viewer token cannot access that job.');
+    }
     const run = await repository.getRun(jobKey, decodeURIComponent(runMatch[2]));
     return run ? json({ run }) : json({ error: 'Run not found.' }, 404);
   }

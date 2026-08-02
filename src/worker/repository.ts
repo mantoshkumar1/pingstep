@@ -2,10 +2,27 @@ export type StoredJob = {
   job_key: string;
   token_hash: string;
   viewer_token_hash: string | null;
+  owner_user_id: string | null;
   expected_update_interval_seconds: number;
   liveness_grace_seconds: number;
   expected_duration_seconds: number | null;
   late_grace_seconds: number | null;
+};
+
+export type StoredUser = {
+  id: string;
+  email: string;
+  password_hash: string;
+  created_at: string;
+};
+
+export type StoredSession = {
+  id: string;
+  user_id: string;
+  token_hash: string;
+  expires_at: string;
+  created_at: string;
+  email: string;
 };
 
 export type StoredEvent = {
@@ -68,7 +85,7 @@ export class PingStepD1Repository {
 
   async getJob(jobKey: string): Promise<StoredJob | null> {
     return this.db.prepare(`
-      SELECT job_key, token_hash, expected_update_interval_seconds,
+      SELECT job_key, token_hash, owner_user_id, expected_update_interval_seconds,
              viewer_token_hash, liveness_grace_seconds, expected_duration_seconds, late_grace_seconds
       FROM jobs WHERE job_key = ?
     `).bind(jobKey).first<StoredJob>();
@@ -76,7 +93,7 @@ export class PingStepD1Repository {
 
   async getJobByViewerTokenHash(tokenHash: string): Promise<StoredJob | null> {
     return this.db.prepare(`
-      SELECT job_key, token_hash, viewer_token_hash, expected_update_interval_seconds,
+      SELECT job_key, token_hash, viewer_token_hash, owner_user_id, expected_update_interval_seconds,
              liveness_grace_seconds, expected_duration_seconds, late_grace_seconds
       FROM jobs WHERE viewer_token_hash = ?
     `).bind(tokenHash).first<StoredJob>();
@@ -84,7 +101,7 @@ export class PingStepD1Repository {
 
   async listJobs(): Promise<Omit<StoredJob, 'token_hash'>[]> {
     const result = await this.db.prepare(`
-      SELECT job_key, expected_update_interval_seconds, liveness_grace_seconds,
+      SELECT job_key, owner_user_id, expected_update_interval_seconds, liveness_grace_seconds,
              expected_duration_seconds, late_grace_seconds
       FROM jobs ORDER BY job_key ASC
     `).all<Omit<StoredJob, 'token_hash'>>();
@@ -95,11 +112,11 @@ export class PingStepD1Repository {
     await this.db.prepare(`
       INSERT INTO jobs (
         job_key, token_hash, expected_update_interval_seconds, liveness_grace_seconds,
-        expected_duration_seconds, late_grace_seconds, viewer_token_hash, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        expected_duration_seconds, late_grace_seconds, viewer_token_hash, owner_user_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       job.job_key, job.token_hash, job.expected_update_interval_seconds, job.liveness_grace_seconds,
-      job.expected_duration_seconds, job.late_grace_seconds, job.viewer_token_hash, now, now
+      job.expected_duration_seconds, job.late_grace_seconds, job.viewer_token_hash, job.owner_user_id, now, now
     ).run();
   }
 
@@ -178,6 +195,44 @@ export class PingStepD1Repository {
       'SELECT * FROM runs WHERE job_key = ? ORDER BY received_at DESC LIMIT 100'
     ).bind(jobKey).all<RunProjection>();
     return result.results;
+  }
+
+  async listRunsForOwner(userId: string): Promise<RunProjection[]> {
+    const result = await this.db.prepare(`
+      SELECT r.* FROM runs r
+      INNER JOIN jobs j ON j.job_key = r.job_key
+      WHERE j.owner_user_id = ?
+      ORDER BY r.received_at DESC LIMIT 100
+    `).bind(userId).all<RunProjection>();
+    return result.results;
+  }
+
+  async createUser(user: StoredUser): Promise<void> {
+    await this.db.prepare('INSERT INTO users (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)')
+      .bind(user.id, user.email, user.password_hash, user.created_at).run();
+  }
+
+  async getUserByEmail(email: string): Promise<StoredUser | null> {
+    return this.db.prepare('SELECT id, email, password_hash, created_at FROM users WHERE email = ?')
+      .bind(email).first<StoredUser>();
+  }
+
+  async createSession(session: Omit<StoredSession, 'email'>): Promise<void> {
+    await this.db.prepare(`
+      INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)
+    `).bind(session.id, session.user_id, session.token_hash, session.expires_at, session.created_at).run();
+  }
+
+  async getSessionByTokenHash(tokenHash: string, now: string): Promise<StoredSession | null> {
+    return this.db.prepare(`
+      SELECT s.id, s.user_id, s.token_hash, s.expires_at, s.created_at, u.email
+      FROM sessions s INNER JOIN users u ON u.id = s.user_id
+      WHERE s.token_hash = ? AND s.expires_at > ?
+    `).bind(tokenHash, now).first<StoredSession>();
+  }
+
+  async deleteSessionByTokenHash(tokenHash: string): Promise<void> {
+    await this.db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(tokenHash).run();
   }
 
   async markExpiredRunsStale(now: string): Promise<number> {
