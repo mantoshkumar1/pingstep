@@ -31,11 +31,12 @@ test('public pages include responsive and accessibility foundations', async () =
 });
 
 test('status and launch discovery assets are present', async () => {
-  const [status, robots, sitemap, locale] = await Promise.all([
-    publicFile('status.html'), publicFile('robots.txt'), publicFile('sitemap.xml'), publicFile('locales/en.js')
+  const [status, robots, sitemap, locale, llms] = await Promise.all([
+    publicFile('status.html'), publicFile('robots.txt'), publicFile('sitemap.xml'), publicFile('locales/en.js'), publicFile('llms.txt')
   ]);
   assert.match(status, /fetch\('\/health'/);
   assert.match(robots, /Sitemap:/);
   assert.match(sitemap, /https:\/\/pingstep.dev/);
   assert.match(locale, /PINGSTEP_LOCALES/);
+  assert.match(llms, /not proof of failure/);
 });
