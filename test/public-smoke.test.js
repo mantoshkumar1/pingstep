@@ -77,3 +77,17 @@ test('pricing keeps the trial small and the paid plans explicit', async () => {
   assert.match(pricing, /US\$39/);
   assert.match(pricing, /Paid access is enabled after a payment request is confirmed/);
 });
+
+test('contact page is ready for customer support and uses the clean public URL', async () => {
+  const [contact, worker, server] = await Promise.all([
+    publicFile('contact.html'),
+    readFile(new URL('../src/worker.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../test/e2e-server.mjs', import.meta.url), 'utf8')
+  ]);
+  assert.match(contact, /https:\/\/pingstep\.dev\/contact/);
+  assert.match(contact, /Support and billing/);
+  assert.match(contact, /PingStep deletion request/);
+  assert.match(contact, /Do not send tokens, credentials, raw logs, or personal data/);
+  assert.match(worker, /url\.pathname === '\/contact'/);
+  assert.match(server, /path === '\/contact'/);
+});
