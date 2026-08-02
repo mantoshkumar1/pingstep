@@ -5,6 +5,7 @@ import { requireSameOrigin } from '../src/worker/accounts.ts';
 import { deleteJob, provisionJob, rotateJobTokens } from '../src/worker/operator.ts';
 import { type AccountPlan, type AlertRecord, type RunProjection, type StoredEvent, type StoredJob, PingStepD1Repository } from '../src/worker/repository.ts';
 import { HostedPingStepService, HttpError, type LifecycleEvent } from '../src/worker/service.ts';
+import { createCheckout } from '../src/worker/billing.ts';
 
 const now = new Date('2026-08-02T00:00:00.000Z');
 
@@ -158,4 +159,30 @@ test('operator and viewer credentials enforce the intended read boundary', async
 test('write endpoints reject cross-site browser requests', () => {
   assert.throws(() => requireSameOrigin(new Request('https://pingstep.dev/v1/jobs', { headers: { origin: 'https://attacker.example' } })), (error: HttpError) => error.status === 403);
   assert.doesNotThrow(() => requireSameOrigin(new Request('https://pingstep.dev/v1/jobs', { headers: { origin: 'https://pingstep.dev' } })));
+});
+
+test('Stripe Checkout is server-created for the signed-in account and never trusts a browser price', async () => {
+  const originalFetch = globalThis.fetch;
+  let request: Request | null = null;
+  globalThis.fetch = async (input, init) => {
+    request = typeof input === 'string' ? new Request(input, init) : input as Request;
+    return Response.json({ url: 'https://checkout.stripe.com/c/pay_test' });
+  };
+  try {
+    const env = {
+      PUBLIC_ORIGIN: 'https://pingstep.dev', STRIPE_SECRET_KEY: 'sk_test_secret', STRIPE_WEBHOOK_SECRET: 'whsec_test_secret',
+      STRIPE_PRO_PRICE_ID: 'price_pro', STRIPE_TEAM_PRICE_ID: 'price_team'
+    } as Env;
+    const checkout = await createCheckout(env, { id: 'user-1', email: 'engineer@example.test' }, 'pro');
+    assert.equal(checkout.url, 'https://checkout.stripe.com/c/pay_test');
+    assert.equal(request?.url, 'https://api.stripe.com/v1/checkout/sessions');
+    assert.equal(request?.headers.get('authorization'), 'Bearer sk_test_secret');
+    const params = new URLSearchParams(await request?.text());
+    assert.equal(params.get('mode'), 'subscription');
+    assert.equal(params.get('line_items[0][price]'), 'price_pro');
+    assert.equal(params.get('metadata[user_id]'), 'user-1');
+    assert.equal(params.get('success_url'), 'https://pingstep.dev/app?checkout=success');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

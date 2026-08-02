@@ -20,6 +20,7 @@ test('language choice persists and the landing page is usable on a phone', async
 
 test('signed-in user can create a job without exposing workflow details', async ({ page }) => {
   await page.route('**/v1/auth/me', route => route.fulfill({ json: { user: { email: 'engineer@example.test' } } }));
+  await page.route('**/v1/account/usage', route => route.fulfill({ json: { plan: 'trial' } }));
   await page.route('**/v1/runs', route => route.fulfill({ json: { runs: [] } }));
   await page.route('**/v1/jobs', async route => {
     if (route.request().method() === 'GET') return route.fulfill({ json: { jobs: [] } });
@@ -37,6 +38,7 @@ test('owner can rotate tokens and delete a job only after exact-key confirmation
   let jobs = [{ job_key: 'nightly-backup' }];
   const confirmations = [];
   await page.route('**/v1/auth/me', route => route.fulfill({ json: { user: { email: 'engineer@example.test' } } }));
+  await page.route('**/v1/account/usage', route => route.fulfill({ json: { plan: 'trial' } }));
   await page.route('**/v1/runs', route => route.fulfill({ json: { runs: [] } }));
   await page.route('**/v1/jobs**', async route => {
     const request = route.request();

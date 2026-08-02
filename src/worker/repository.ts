@@ -35,6 +35,16 @@ export type AccountPlan = {
   active_until: string | null;
 };
 
+export type StoredBillingSubscription = {
+  stripe_subscription_id: string;
+  user_id: string;
+  stripe_customer_id: string;
+  plan: 'pro' | 'team';
+  status: string;
+  current_period_end: string | null;
+  updated_at: string;
+};
+
 export type StoredEvent = {
   event_id: string;
   job_key: string;
@@ -153,6 +163,23 @@ export class PingStepD1Repository {
   async setAccountPlan(userId: string, plan: AccountPlan['plan'], activeUntil: string | null, now: string): Promise<void> {
     await this.db.prepare('INSERT INTO account_plans (user_id, plan, active_until, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET plan = excluded.plan, active_until = excluded.active_until, updated_at = excluded.updated_at')
       .bind(userId, plan, activeUntil, now, now).run();
+  }
+
+  async getBillingSubscription(subscriptionId: string): Promise<StoredBillingSubscription | null> {
+    return this.db.prepare('SELECT stripe_subscription_id, user_id, stripe_customer_id, plan, status, current_period_end, updated_at FROM billing_subscriptions WHERE stripe_subscription_id = ?')
+      .bind(subscriptionId).first<StoredBillingSubscription>();
+  }
+
+  async getBillingSubscriptionForUser(userId: string): Promise<StoredBillingSubscription | null> {
+    return this.db.prepare('SELECT stripe_subscription_id, user_id, stripe_customer_id, plan, status, current_period_end, updated_at FROM billing_subscriptions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1')
+      .bind(userId).first<StoredBillingSubscription>();
+  }
+
+  async upsertBillingSubscription(subscription: StoredBillingSubscription): Promise<void> {
+    await this.db.prepare(`INSERT INTO billing_subscriptions (stripe_subscription_id, user_id, stripe_customer_id, plan, status, current_period_end, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(stripe_subscription_id) DO UPDATE SET user_id = excluded.user_id, stripe_customer_id = excluded.stripe_customer_id, plan = excluded.plan, status = excluded.status, current_period_end = excluded.current_period_end, updated_at = excluded.updated_at`)
+      .bind(subscription.stripe_subscription_id, subscription.user_id, subscription.stripe_customer_id, subscription.plan, subscription.status, subscription.current_period_end, subscription.updated_at).run();
   }
 
   async createJob(job: StoredJob, now: string): Promise<void> {
