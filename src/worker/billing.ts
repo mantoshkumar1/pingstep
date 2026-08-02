@@ -84,6 +84,18 @@ export function resolveBillingEntitlement(subscriptions: readonly Pick<StoredBil
   return { plan: paid[0].plan, active_until: paid[0].current_period_end };
 }
 
+/**
+ * Stripe can change an existing subscription to `past_due` when an immediate,
+ * prorated plan change cannot be collected. Keep the access that was already
+ * paid for until its existing end date; a failed collection must not turn a
+ * paid customer into a trial customer mid-period.
+ */
+function retainPriorPaidEntitlementOnCollectionFailure(entitlement: AccountPlan, prior: AccountPlan, status: string, now: string): AccountPlan {
+  const priorIsCurrent = prior.plan !== 'trial' && (!prior.active_until || Date.parse(prior.active_until) > Date.parse(now));
+  if (entitlement.plan === 'trial' && priorIsCurrent && (status === 'past_due' || status === 'unpaid')) return prior;
+  return entitlement;
+}
+
 export async function createCheckout(env: Env, repository: PingStepD1Repository, account: Account, requestedPlan: unknown): Promise<{ url: string }> {
   if (requestedPlan !== 'pro' && requestedPlan !== 'team') throw new HttpError(400, 'Choose Pro or Team.');
   const settings = config(env);
@@ -121,8 +133,11 @@ async function syncSubscription(repository: PingStepD1Repository, settings: Stri
   if (!id || !customerId || !status || !plan || !owner) return;
   const periodEnd = typeof subscription.current_period_end === 'number' ? new Date(subscription.current_period_end * 1000).toISOString() : null;
   const now = new Date().toISOString();
+  const priorEntitlement = await repository.getAccountPlan(owner, now);
   await repository.upsertBillingSubscription({ stripe_subscription_id: id, user_id: owner, stripe_customer_id: customerId, plan, status, current_period_end: periodEnd, updated_at: now });
-  const entitlement = resolveBillingEntitlement(await repository.listBillingSubscriptionsForUser(owner), now);
+  const entitlement = retainPriorPaidEntitlementOnCollectionFailure(
+    resolveBillingEntitlement(await repository.listBillingSubscriptionsForUser(owner), now), priorEntitlement, status, now
+  );
   await repository.setAccountPlan(owner, entitlement.plan, entitlement.active_until, now);
 }
 

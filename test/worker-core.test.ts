@@ -258,6 +258,25 @@ test('a signed failed checkout preserves an earlier active paid plan', async () 
   }
 });
 
+test('a failed prorated plan update preserves access already paid on the same subscription', async () => {
+  const repository = new MemoryRepository();
+  repository.billingSubscriptions.push({ stripe_subscription_id: 'sub_pro', user_id: 'user-1', stripe_customer_id: 'cus_pro', plan: 'pro', status: 'active', current_period_end: '2026-09-02T00:00:00.000Z', updated_at: '2026-08-02T00:00:00.000Z' });
+  repository.accountPlan = { plan: 'pro', active_until: '2026-09-02T00:00:00.000Z' };
+  const payload = JSON.stringify({ type: 'invoice.payment_failed', data: { object: { subscription: 'sub_pro' } } });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ id: 'sub_pro', customer: 'cus_pro', status: 'past_due', current_period_end: 1788307200, metadata: { user_id: 'user-1' }, items: { data: [{ price: { id: 'price_team' } }] } });
+  try {
+    await handleStripeWebhook(new Request('https://pingstep.dev/v1/billing/stripe/webhook', { method: 'POST', headers: { 'stripe-signature': await stripeSignature(payload, 'whsec_test_secret') }, body: payload }), billingEnv(), repository as unknown as PingStepD1Repository);
+    assert.deepEqual(repository.accountPlan, { plan: 'pro', active_until: '2026-09-02T00:00:00.000Z' });
+    assert.deepEqual(repository.billingSubscriptions[0], {
+      stripe_subscription_id: 'sub_pro', user_id: 'user-1', stripe_customer_id: 'cus_pro', plan: 'team', status: 'past_due',
+      current_period_end: '2026-09-02T00:00:00.000Z', updated_at: repository.billingSubscriptions[0].updated_at
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('a signed terminal subscription event removes access when no paid subscription remains', async () => {
   const repository = new MemoryRepository();
   const payload = JSON.stringify({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_cancelled' } } });
