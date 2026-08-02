@@ -31,7 +31,7 @@ Included:
 - Explicit `started`, `heartbeat`, `step`, `succeeded`, `failed`, and `cancelled` events.
 - Per-job bearer tokens, stored as SHA-256 hashes, and event-id deduplication.
 - A durable dashboard projection: `running`, `stale`, `succeeded`, or `failed`, plus the last reported stage.
-- One operator-facing dashboard, protected by an operator authentication layer before external design partners are invited.
+- An operator dashboard plus a read-only, per-job viewer mode for invited pilot users. Viewer tokens cannot access other jobs, alerts, or operator controls.
 - Webhook alert records with retry state; outbound delivery is enabled only after a partner supplies a safe destination.
 
 Not included yet:
@@ -54,8 +54,8 @@ All Worker SQL uses parameter binding. Timestamps are stored as ISO-8601 UTC str
 ## Security model
 
 - Event endpoint: `Authorization: Bearer <job token>`; the Worker SHA-256 hashes it and compares it to the stored job hash using a timing-safe byte comparison.
-- Job tokens are generated once, shown once to the operator, and never retained as plaintext by PingStep.
-- Operator sign-in is separate from job-token authentication; this is the next security implementation task.
+- Job tokens and viewer tokens are generated once, shown once to the operator, and never retained as plaintext by PingStep.
+- Operator sign-in is separate from job-token authentication. A viewer token is scoped to exactly one job and permits only its runs and event history.
 - No credentials are committed. Deployment secrets are set interactively with Wrangler; local-only values live in ignored `.dev.vars`.
 - The Worker blocks the development-only scheduled-test URL in hosted environments.
 
@@ -65,7 +65,7 @@ All Worker SQL uses parameter binding. Timestamps are stored as ISO-8601 UTC str
 2. Apply the tracked D1 migration remotely.
 3. Deploy the Worker to the staging environment and use its HTTPS URL with the local simulator.
 4. Before launch, provision a synthetic test job and verify the full hosted lifecycle, terminal state, and stale transition without connecting to a customer environment.
-5. Enable stale alert delivery and invite the first design partner only after operator authentication is in place.
+5. Invite the first design partner only after provisioning a scoped viewer token. Enable alert delivery later, when a qualified partner chooses a destination.
 6. After launch, validate the customer-environment adapter with a consenting customer using a non-sensitive job.
 
 ## Evidence versus assumptions
