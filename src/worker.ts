@@ -93,6 +93,9 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   if (request.method === 'GET' && url.pathname === '/status') {
     return env.ASSETS.fetch(new Request(new URL('/status.html', request.url), request));
   }
+  if (request.method === 'GET' && url.pathname === '/contact') {
+    return env.ASSETS.fetch(new Request(new URL('/contact.html', request.url), request));
+  }
   if (request.method === 'GET' && url.pathname === '/index.html') {
     return Response.redirect(new URL('/app', request.url).toString(), 302);
   }

@@ -1,5 +1,12 @@
 import { expect, test } from '@playwright/test';
 
+test('customer support is available at the clean contact URL', async ({ page }) => {
+  await page.goto('/contact');
+  await expect(page).toHaveTitle('Contact PingStep support');
+  await expect(page.getByRole('heading', { name: 'Contact PingStep' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'mantoshk234@gmail.com' })).toHaveAttribute('href', /mailto:/);
+});
+
 test('language choice persists and the landing page is usable on a phone', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
