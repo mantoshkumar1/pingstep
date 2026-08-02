@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import ssl
 import sys
 import time
 import uuid
@@ -18,12 +19,22 @@ def post_event(base_url, token, event):
     request = Request(
         base_url.rstrip("/") + "/v1/events",
         data=json.dumps(event).encode(),
-        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", "User-Agent": "PingStep-Simulator/0.1"},
         method="POST",
     )
-    with urlopen(request, timeout=10) as response:
+    with urlopen(request, timeout=10, context=tls_context()) as response:
         if response.status not in (200, 202):
             raise RuntimeError(f"PingStep returned HTTP {response.status}.")
+
+
+def tls_context():
+    ca_file = os.environ.get("PINGSTEP_CA_FILE")
+    if not ca_file:
+        for candidate in ("/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt"):
+            if os.path.isfile(candidate):
+                ca_file = candidate
+                break
+    return ssl.create_default_context(cafile=ca_file)
 
 
 def main():

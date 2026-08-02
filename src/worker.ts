@@ -73,8 +73,8 @@ export default {
   },
 
   async scheduled(_controller, env): Promise<void> {
-    // The repository is deliberately instantiated per invocation: no mutable request state is global.
-    // Reconciliation will be enabled with the hosted ingestion endpoint in the next task.
-    void new PingStepD1Repository(env.DB);
+    // Instantiated per invocation: no mutable request state is global.
+    const changed = await new HostedPingStepService(new PingStepD1Repository(env.DB)).reconcile();
+    console.log(JSON.stringify({ event: 'scheduled_reconcile', stale_runs_marked: changed }));
   }
 } satisfies ExportedHandler<Env>;

@@ -148,6 +148,15 @@ export class PingStepD1Repository {
     return result.results;
   }
 
+  async markExpiredRunsStale(now: string): Promise<number> {
+    const result = await this.db.prepare(`
+      UPDATE runs
+      SET status = 'stale', stale_at = ?, stale_transitions = stale_transitions + 1
+      WHERE status = 'running' AND liveness_deadline IS NOT NULL AND liveness_deadline <= ?
+    `).bind(now, now).run();
+    return result.meta.changes;
+  }
+
   async upsertRun(run: RunProjection): Promise<void> {
     await this.db.prepare(`
       INSERT INTO runs (

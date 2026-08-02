@@ -120,4 +120,8 @@ export class HostedPingStepService {
     await this.repository.upsertRun(run);
     return run;
   }
+
+  async reconcile(): Promise<number> {
+    return this.repository.markExpiredRunsStale(this.now().toISOString());
+  }
 }
