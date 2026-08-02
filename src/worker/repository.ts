@@ -171,8 +171,16 @@ export class PingStepD1Repository {
   }
 
   async getBillingSubscriptionForUser(userId: string): Promise<StoredBillingSubscription | null> {
-    return this.db.prepare('SELECT stripe_subscription_id, user_id, stripe_customer_id, plan, status, current_period_end, updated_at FROM billing_subscriptions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1')
+    return this.db.prepare(`SELECT stripe_subscription_id, user_id, stripe_customer_id, plan, status, current_period_end, updated_at
+      FROM billing_subscriptions WHERE user_id = ?
+      ORDER BY CASE WHEN status IN ('active', 'trialing') THEN 0 ELSE 1 END, updated_at DESC LIMIT 1`)
       .bind(userId).first<StoredBillingSubscription>();
+  }
+
+  async listBillingSubscriptionsForUser(userId: string): Promise<StoredBillingSubscription[]> {
+    const result = await this.db.prepare('SELECT stripe_subscription_id, user_id, stripe_customer_id, plan, status, current_period_end, updated_at FROM billing_subscriptions WHERE user_id = ?')
+      .bind(userId).all<StoredBillingSubscription>();
+    return result.results;
   }
 
   async upsertBillingSubscription(subscription: StoredBillingSubscription): Promise<void> {

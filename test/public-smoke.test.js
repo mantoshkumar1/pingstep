@@ -81,6 +81,8 @@ test('pricing keeps the trial small and the paid plans explicit', async () => {
   assert.match(workspace, /\/v1\/billing\/checkout/);
   assert.match(workspace, /Manage billing/);
   assert.match(workspace, /\/v1\/billing\/portal/);
+  assert.match(workspace, /id="billing-message"/);
+  assert.match(workspace, /\$\('billing-message'\)\.textContent=error\.message/);
 });
 
 test('contact page is ready for customer support and uses the clean public URL', async () => {
