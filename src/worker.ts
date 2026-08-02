@@ -2,6 +2,7 @@
 
 import { PingStepD1Repository } from './worker/repository';
 import { HostedPingStepService, HttpError } from './worker/service';
+import { requireOperator } from './worker/auth';
 
 const json = (body: unknown, status = 200) => Response.json(body, {
   status,
@@ -15,6 +16,29 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   }
   if (request.method === 'GET' && url.pathname === '/health') {
     return json({ status: 'ok', storage: 'd1' });
+  }
+  if (request.method === 'GET' && url.pathname === '/v1/runs') {
+    await requireOperator(request, env);
+    return json({ runs: await new PingStepD1Repository(env.DB).listRuns() });
+  }
+  const runMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)$/);
+  const eventsMatch = url.pathname.match(/^\/v1\/runs\/([^/]+)\/([^/]+)\/events$/);
+  if (request.method === 'GET' && eventsMatch) {
+    await requireOperator(request, env);
+    const repository = new PingStepD1Repository(env.DB);
+    const jobKey = decodeURIComponent(eventsMatch[1]);
+    const runId = decodeURIComponent(eventsMatch[2]);
+    if (!await repository.getRun(jobKey, runId)) return json({ error: 'Run not found.' }, 404);
+    const events = (await repository.listEventsForRun(jobKey, runId)).map((event) => ({
+      ...event,
+      data: JSON.parse(event.data_json) as Record<string, unknown>
+    }));
+    return json({ events });
+  }
+  if (request.method === 'GET' && runMatch) {
+    await requireOperator(request, env);
+    const run = await new PingStepD1Repository(env.DB).getRun(decodeURIComponent(runMatch[1]), decodeURIComponent(runMatch[2]));
+    return run ? json({ run }) : json({ error: 'Run not found.' }, 404);
   }
   if (request.method === 'POST' && url.pathname === '/v1/events') {
     const service = new HostedPingStepService(new PingStepD1Repository(env.DB));
