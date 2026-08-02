@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { requireOperator, requireReadAccess } from '../src/worker/auth.ts';
 import { requireSameOrigin } from '../src/worker/accounts.ts';
-import { provisionJob } from '../src/worker/operator.ts';
+import { deleteJob, provisionJob, rotateJobTokens } from '../src/worker/operator.ts';
 import { type AccountPlan, type AlertRecord, type RunProjection, type StoredEvent, type StoredJob, PingStepD1Repository } from '../src/worker/repository.ts';
 import { HostedPingStepService, HttpError, type LifecycleEvent } from '../src/worker/service.ts';
 
@@ -49,6 +49,20 @@ class MemoryRepository {
   async countRunsForOwnerSince() { return 0; }
   async countJobsForOwner() { return [...this.jobs.values()].filter((job) => job.owner_user_id === 'user-1').length; }
   async createJob(job: StoredJob) { this.jobs.set(job.job_key, job); }
+  async rotateJobTokens(jobKey: string, ownerUserId: string, tokenHash: string, viewerTokenHash: string) {
+    const job = this.jobs.get(jobKey);
+    if (!job || job.owner_user_id !== ownerUserId) return false;
+    this.jobs.set(jobKey, { ...job, token_hash: tokenHash, viewer_token_hash: viewerTokenHash });
+    return true;
+  }
+  async deleteJobForOwner(jobKey: string, ownerUserId: string) {
+    const job = this.jobs.get(jobKey);
+    if (!job || job.owner_user_id !== ownerUserId) return false;
+    this.jobs.delete(jobKey);
+    for (const [id, event] of this.events) if (event.job_key === jobKey) this.events.delete(id);
+    for (const [id, run] of this.runs) if (run.job_key === jobKey) this.runs.delete(id);
+    return true;
+  }
 }
 
 const repositoryForService = async () => {
@@ -118,6 +132,18 @@ test('job provisioning applies plan constraints and only persists token hashes',
   assert.equal(stored?.token_hash, await hash(result.token));
   await provisionJob(repository as unknown as PingStepD1Repository, { job_key: 'second-job' }, 'user-1');
   await assert.rejects(() => provisionJob(repository as unknown as PingStepD1Repository, { job_key: 'third-job' }, 'user-1'), (error: HttpError) => error.status === 402);
+});
+
+test('job token rotation and deletion require the exact job key and respect ownership', async () => {
+  const repository = await repositoryForService();
+  const priorHash = (await repository.getJob('nightly'))?.token_hash;
+  await assert.rejects(() => rotateJobTokens(repository as unknown as PingStepD1Repository, 'nightly', { confirm_job_key: 'wrong' }, 'user-1'), (error: HttpError) => error.status === 400);
+  const tokens = await rotateJobTokens(repository as unknown as PingStepD1Repository, 'nightly', { confirm_job_key: 'nightly' }, 'user-1');
+  assert.match(tokens.token, /^ps_job_[a-f0-9]{64}$/);
+  assert.notEqual((await repository.getJob('nightly'))?.token_hash, priorHash);
+  await assert.rejects(() => deleteJob(repository as unknown as PingStepD1Repository, 'nightly', { confirm_job_key: 'nightly' }, 'someone-else'), (error: HttpError) => error.status === 404);
+  await deleteJob(repository as unknown as PingStepD1Repository, 'nightly', { confirm_job_key: 'nightly' }, 'user-1');
+  assert.equal(await repository.getJob('nightly'), null);
 });
 
 test('operator and viewer credentials enforce the intended read boundary', async () => {

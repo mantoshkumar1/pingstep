@@ -41,6 +41,27 @@ function createViewerToken(): string {
   return `ps_view_${Array.from(bytes).map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
 }
 
+function confirmedJobKey(rawInput: unknown, jobKey: string): void {
+  if (!rawInput || typeof rawInput !== 'object' || Array.isArray(rawInput) || (rawInput as { confirm_job_key?: unknown }).confirm_job_key !== jobKey) {
+    throw new HttpError(400, 'Type the exact job key to confirm this action.');
+  }
+}
+
+export async function rotateJobTokens(repository: PingStepD1Repository, jobKey: string, rawInput: unknown, ownerUserId: string) {
+  confirmedJobKey(rawInput, jobKey);
+  const token = createToken();
+  const viewerToken = createViewerToken();
+  if (!await repository.rotateJobTokens(jobKey, ownerUserId, await hash(token), await hash(viewerToken), new Date().toISOString())) {
+    throw new HttpError(404, 'Job not found.');
+  }
+  return { token, viewer_token: viewerToken, warning: 'Previous job and viewer tokens stopped working. Save these replacements now.' };
+}
+
+export async function deleteJob(repository: PingStepD1Repository, jobKey: string, rawInput: unknown, ownerUserId: string) {
+  confirmedJobKey(rawInput, jobKey);
+  if (!await repository.deleteJobForOwner(jobKey, ownerUserId)) throw new HttpError(404, 'Job not found.');
+}
+
 export async function provisionJob(repository: PingStepD1Repository, rawInput: unknown, ownerUserId: string | null = null) {
   if (!rawInput || typeof rawInput !== 'object' || Array.isArray(rawInput)) throw new HttpError(400, 'Job configuration must be a JSON object.');
   const input = rawInput as JobInput;

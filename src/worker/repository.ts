@@ -122,6 +122,15 @@ export class PingStepD1Repository {
     return result.results;
   }
 
+  async listJobsForOwner(userId: string): Promise<Omit<StoredJob, 'token_hash' | 'viewer_token_hash'>[]> {
+    const result = await this.db.prepare(`
+      SELECT job_key, owner_user_id, expected_update_interval_seconds, liveness_grace_seconds,
+             expected_duration_seconds, late_grace_seconds
+      FROM jobs WHERE owner_user_id = ? ORDER BY job_key ASC
+    `).bind(userId).all<Omit<StoredJob, 'token_hash' | 'viewer_token_hash'>>();
+    return result.results;
+  }
+
   async countJobsForOwner(userId: string): Promise<number> {
     const result = await this.db.prepare('SELECT COUNT(*) AS count FROM jobs WHERE owner_user_id = ?')
       .bind(userId).first<{ count: number }>();
@@ -156,6 +165,28 @@ export class PingStepD1Repository {
       job.job_key, job.token_hash, job.expected_update_interval_seconds, job.liveness_grace_seconds,
       job.expected_duration_seconds, job.late_grace_seconds, job.viewer_token_hash, job.owner_user_id, now, now
     ).run();
+  }
+
+  async rotateJobTokens(jobKey: string, ownerUserId: string, tokenHash: string, viewerTokenHash: string, now: string): Promise<boolean> {
+    const result = await this.db.prepare(`
+      UPDATE jobs SET token_hash = ?, viewer_token_hash = ?, updated_at = ?
+      WHERE job_key = ? AND owner_user_id = ?
+    `).bind(tokenHash, viewerTokenHash, now, jobKey, ownerUserId).run();
+    return result.meta.changes === 1;
+  }
+
+  async deleteJobForOwner(jobKey: string, ownerUserId: string): Promise<boolean> {
+    const ownsJob = await this.db.prepare('SELECT 1 FROM jobs WHERE job_key = ? AND owner_user_id = ?')
+      .bind(jobKey, ownerUserId).first();
+    if (!ownsJob) return false;
+    const results = await this.db.batch([
+      this.db.prepare('DELETE FROM alerts WHERE job_key = ?').bind(jobKey),
+      this.db.prepare('DELETE FROM pending_events WHERE event_id IN (SELECT event_id FROM events WHERE job_key = ?)').bind(jobKey),
+      this.db.prepare('DELETE FROM runs WHERE job_key = ?').bind(jobKey),
+      this.db.prepare('DELETE FROM events WHERE job_key = ?').bind(jobKey),
+      this.db.prepare('DELETE FROM jobs WHERE job_key = ? AND owner_user_id = ?').bind(jobKey, ownerUserId)
+    ]);
+    return results.at(-1)?.meta.changes === 1;
   }
 
   async getEvent(eventId: string): Promise<StoredEvent | null> {
