@@ -17,8 +17,8 @@
   <body>
     <header><div><h1>PingStep</h1><p>Progress-aware monitoring for unattended scripts</p></div><span id="updated" class="notice">Live refresh every 3 seconds</span></header>
     <main>
-      <div class="summary" aria-label="Run summary"><div class="metric"><strong id="active-count">0</strong><span>Active</span></div><div class="metric"><strong id="stale-count">0</strong><span>Stale</span></div><div class="metric"><strong id="succeeded-count">0</strong><span>Succeeded</span></div><div class="metric"><strong id="failed-count">0</strong><span>Failed</span></div></div>
-      <section><div class="section-head"><h2>Runs</h2><div><button id="active-filter" class="active">Active</button><button id="all-filter">All recent</button></div></div><div id="table-wrap"></div></section>
+      <div class="summary" aria-label="Run summary"><div class="metric"><strong id="active-count">0</strong><span>Running</span></div><div class="metric"><strong id="stale-count">0</strong><span>Stale</span></div><div class="metric"><strong id="succeeded-count">0</strong><span>Succeeded</span></div><div class="metric"><strong id="failed-count">0</strong><span>Failed</span></div></div>
+      <section><div class="section-head"><h2>Runs</h2><div><button id="active-filter" class="active">Open</button><button id="all-filter">All recent</button></div></div><div id="table-wrap"></div></section>
     </main>
     <dialog id="detail"><div class="modal-head"><div><h2 id="detail-title">Run details</h2><span id="detail-status"></span></div><button id="close-detail" aria-label="Close run details">Close</button></div><div id="detail-body" class="modal-body"></div></dialog>
     <script>
@@ -26,12 +26,12 @@
       const $ = (id) => document.getElementById(id);
       const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' })[char]);
       const date = (value) => value ? new Intl.DateTimeFormat(undefined, { dateStyle:'medium', timeStyle:'short' }).format(new Date(value)) : '—';
-      const active = (run) => ['running', 'stale'].includes(run.status);
+      const open = (run) => ['running', 'stale'].includes(run.status);
       function render() {
         const byStatus = (status) => state.runs.filter((run) => run.status === status).length;
-        $('active-count').textContent = state.runs.filter(active).length; $('stale-count').textContent = byStatus('stale'); $('succeeded-count').textContent = byStatus('succeeded'); $('failed-count').textContent = byStatus('failed');
+        $('active-count').textContent = byStatus('running'); $('stale-count').textContent = byStatus('stale'); $('succeeded-count').textContent = byStatus('succeeded'); $('failed-count').textContent = byStatus('failed');
         $('active-filter').classList.toggle('active', state.filter === 'active'); $('all-filter').classList.toggle('active', state.filter === 'all');
-        const runs = state.filter === 'active' ? state.runs.filter(active) : state.runs;
+        const runs = state.filter === 'active' ? state.runs.filter(open) : state.runs;
         $('table-wrap').innerHTML = runs.length ? `<table><thead><tr><th>Job</th><th title="PingStep's lifecycle assessment">Run status</th><th title="The most recent named progress marker sent by the job">Last reported stage</th><th>Last update</th><th>Run ID</th></tr></thead><tbody>${runs.map((run) => `<tr data-run data-job="${escapeHtml(run.job_key)}" data-id="${escapeHtml(run.run_id)}"><td>${escapeHtml(run.job_key)}</td><td><span class="badge ${escapeHtml(run.status)}">${escapeHtml(run.status)}</span>${run.is_late ? ' <span class="badge late">late</span>' : ''}</td><td>${escapeHtml(run.current_step || 'No stage reported yet')}</td><td>${date(run.received_at)}</td><td class="mono">${escapeHtml(run.run_id)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">No runs to show yet.</div>';
         document.querySelectorAll('[data-run]').forEach((row) => row.addEventListener('click', () => showDetail(row.dataset.job, row.dataset.id)));
       }
