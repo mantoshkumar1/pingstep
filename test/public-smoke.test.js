@@ -33,16 +33,30 @@ test('public pages include responsive and accessibility foundations', async () =
 
 test('status and launch discovery assets are present', async () => {
   const [status, robots, sitemap, locale, llms] = await Promise.all([
-    publicFile('status.html'), publicFile('robots.txt'), publicFile('sitemap.xml'), publicFile('locales/en.js'), publicFile('llms.txt')
+    publicFile('status.html'), publicFile('robots.txt'), publicFile('sitemap.xml'), publicFile('locales/i18n.js'), publicFile('llms.txt')
   ]);
   assert.match(status, /fetch\('\/health'/);
   assert.match(robots, /Sitemap:/);
   assert.match(sitemap, /https:\/\/pingstep.dev/);
-  assert.match(locale, /PINGSTEP_LOCALES/);
+  assert.match(locale, /PingStepI18n/);
+  assert.match(locale, /'pt-BR'/);
   assert.match(llms, /not proof of failure/);
   const headers = await publicFile('_headers');
   assert.match(headers, /X-Content-Type-Options: nosniff/);
   assert.match(headers, /frame-ancestors 'none'/);
+});
+
+test('landing and dashboard offer persistent Spanish, Brazilian Portuguese, and German', async () => {
+  const [landing, workspace, locale] = await Promise.all([publicFile('landing.html'), publicFile('workspace.html'), publicFile('locales/i18n.js')]);
+  for (const page of [landing, workspace]) {
+    assert.match(page, /option value="es"/);
+    assert.match(page, /option value="pt-BR"/);
+    assert.match(page, /option value="de"/);
+    assert.match(page, /PingStepI18n\.init/);
+  }
+  assert.match(locale, /'See where your job is\.'\s*:\s*'Vea dónde está su tarea\.'/);
+  assert.match(locale, /'See where your job is\.'\s*:\s*'Veja onde está o seu trabalho\.'/);
+  assert.match(locale, /'See where your job is\.'\s*:\s*'Sehen Sie, wo Ihr Job steht\.'/);
 });
 
 test('pricing keeps the trial small and the paid plans explicit', async () => {
