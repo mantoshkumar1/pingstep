@@ -1,6 +1,7 @@
 export type StoredJob = {
   job_key: string;
   token_hash: string;
+  viewer_token_hash: string | null;
   expected_update_interval_seconds: number;
   liveness_grace_seconds: number;
   expected_duration_seconds: number | null;
@@ -68,9 +69,17 @@ export class PingStepD1Repository {
   async getJob(jobKey: string): Promise<StoredJob | null> {
     return this.db.prepare(`
       SELECT job_key, token_hash, expected_update_interval_seconds,
-             liveness_grace_seconds, expected_duration_seconds, late_grace_seconds
+             viewer_token_hash, liveness_grace_seconds, expected_duration_seconds, late_grace_seconds
       FROM jobs WHERE job_key = ?
     `).bind(jobKey).first<StoredJob>();
+  }
+
+  async getJobByViewerTokenHash(tokenHash: string): Promise<StoredJob | null> {
+    return this.db.prepare(`
+      SELECT job_key, token_hash, viewer_token_hash, expected_update_interval_seconds,
+             liveness_grace_seconds, expected_duration_seconds, late_grace_seconds
+      FROM jobs WHERE viewer_token_hash = ?
+    `).bind(tokenHash).first<StoredJob>();
   }
 
   async listJobs(): Promise<Omit<StoredJob, 'token_hash'>[]> {
@@ -86,11 +95,11 @@ export class PingStepD1Repository {
     await this.db.prepare(`
       INSERT INTO jobs (
         job_key, token_hash, expected_update_interval_seconds, liveness_grace_seconds,
-        expected_duration_seconds, late_grace_seconds, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        expected_duration_seconds, late_grace_seconds, viewer_token_hash, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       job.job_key, job.token_hash, job.expected_update_interval_seconds, job.liveness_grace_seconds,
-      job.expected_duration_seconds, job.late_grace_seconds, now, now
+      job.expected_duration_seconds, job.late_grace_seconds, job.viewer_token_hash, now, now
     ).run();
   }
 
@@ -161,6 +170,13 @@ export class PingStepD1Repository {
 
   async listRuns(): Promise<RunProjection[]> {
     const result = await this.db.prepare('SELECT * FROM runs ORDER BY received_at DESC LIMIT 100').all<RunProjection>();
+    return result.results;
+  }
+
+  async listRunsForJob(jobKey: string): Promise<RunProjection[]> {
+    const result = await this.db.prepare(
+      'SELECT * FROM runs WHERE job_key = ? ORDER BY received_at DESC LIMIT 100'
+    ).bind(jobKey).all<RunProjection>();
     return result.results;
   }
 

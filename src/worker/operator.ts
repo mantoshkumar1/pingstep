@@ -34,6 +34,12 @@ function createToken(): string {
   return `ps_job_${Array.from(bytes).map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
 }
 
+function createViewerToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return `ps_view_${Array.from(bytes).map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
 export async function provisionJob(repository: PingStepD1Repository, rawInput: unknown) {
   if (!rawInput || typeof rawInput !== 'object' || Array.isArray(rawInput)) throw new HttpError(400, 'Job configuration must be a JSON object.');
   const input = rawInput as JobInput;
@@ -46,9 +52,11 @@ export async function provisionJob(repository: PingStepD1Repository, rawInput: u
   const expectedDuration = positiveInteger(input.expected_duration_seconds, 'expected_duration_seconds');
   const lateGrace = nonNegativeInteger(input.late_grace_seconds, 'late_grace_seconds');
   const token = createToken();
+  const viewerToken = createViewerToken();
   await repository.createJob({
     job_key: input.job_key,
     token_hash: await hash(token),
+    viewer_token_hash: await hash(viewerToken),
     expected_update_interval_seconds: interval ?? 60,
     liveness_grace_seconds: livenessGrace ?? 120,
     expected_duration_seconds: expectedDuration,
@@ -63,6 +71,7 @@ export async function provisionJob(repository: PingStepD1Repository, rawInput: u
       late_grace_seconds: lateGrace
     },
     token,
+    viewer_token: viewerToken,
     warning: 'Save this job token now. PingStep stores only its hash and cannot show it again.'
   };
 }
