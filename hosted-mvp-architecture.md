@@ -64,12 +64,13 @@ All Worker SQL uses parameter binding. Timestamps are stored as ISO-8601 UTC str
 1. Create the D1 database and add its ID to `wrangler.jsonc`.
 2. Apply the tracked D1 migration remotely.
 3. Deploy the Worker to the staging environment and use its HTTPS URL with the local simulator.
-4. Provision one job token, configure the customer-environment adapter with that URL/token, and verify one non-sensitive customer run.
+4. Before launch, provision a synthetic test job and verify the full hosted lifecycle, terminal state, and stale transition without connecting to a customer environment.
 5. Enable stale alert delivery and invite the first design partner only after operator authentication is in place.
+6. After launch, validate the customer-environment adapter with a consenting customer using a non-sensitive job.
 
 ## Evidence versus assumptions
 
-**Evidence:** A customer-managed job system can be accessible only from its own environment; customer job systems may expose states such as Queue, Staging, Running, Complete, Error, and Terminated; some real jobs can remain Running for roughly three hours with no automatic stall signal.
+**Evidence:** Customer job systems may expose states such as Queue, Staging, Running, Complete, Error, and Terminated; some real jobs can remain Running for roughly three hours with no automatic stall signal. The hosted service has been validated with synthetic lifecycle and stale-transition runs without customer data or a customer environment.
 
 **Assumptions to test:** The office network permits outbound HTTPS to the Worker URL; a one-minute stale evaluation is sufficiently responsive for the pilot; D1’s MVP limits fit the early event volume; design partners will accept a bearer-token adapter before SSO is available.
 
