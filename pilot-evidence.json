@@ -1,0 +1,14 @@
+{
+  "assessment_window_complete": false,
+  "conversations": [
+    {
+      "partner_alias": "DP-ADJ-01",
+      "date": "2026-08-01",
+      "qualified": false,
+      "recent_real_job": "A customer-managed unattended job that can remain Running for roughly three hours.",
+      "evidence_note": "The engineer currently polls a customer job-status command through a local adapter. The system reports Queue, Staging, Running, Complete, Error, and Terminated. Repeated Running does not reveal internal progress, so the relevant product distinction is liveness versus late runtime. This is adjacent evidence only because the real job exceeds the 20–90 minute target screen."
+    }
+  ],
+  "integrations": [],
+  "commitments": []
+}
