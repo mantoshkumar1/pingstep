@@ -10,7 +10,7 @@ const json = (body: unknown, status = 200) => Response.json(body, {
 
 async function handleRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  if (url.pathname === '/__scheduled' && env.ENVIRONMENT !== 'development') {
+  if (url.pathname === '/__scheduled') {
     return new Response('Not found', { status: 404 });
   }
   if (request.method === 'GET' && url.pathname === '/health') {
