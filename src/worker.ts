@@ -19,6 +19,12 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   if (request.method === 'GET' && url.pathname === '/health') {
     return json({ status: 'ok', storage: 'd1' });
   }
+  if (request.method === 'GET' && url.pathname === '/') {
+    return env.ASSETS.fetch(new Request(new URL('/landing.html', request.url), request));
+  }
+  if (request.method === 'GET' && url.pathname === '/app') {
+    return env.ASSETS.fetch(new Request(new URL('/index.html', request.url), request));
+  }
   if (request.method === 'GET' && url.pathname === '/v1/runs') {
     const repository = new PingStepD1Repository(env.DB);
     const access = await requireReadAccess(request, env, repository);
