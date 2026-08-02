@@ -4,11 +4,11 @@
 
 ## Evidence and assumptions
 
-**Evidence provided:** PingStep is intended for unattended 20–90 minute scripts run outside CI/workflow platforms, including backups, migrations, batch jobs, and report generators.
+**Evidence provided:** PingStep is intended for unattended 20–90 minute scripts run outside CI/workflow platforms, including backups, migrations, batch jobs, and report generators. One adjacent engineer conversation has surfaced a customer-managed job that can run for roughly three hours, with status-only visibility and no automatic stall signal.
 
 **Assumptions to test:** these jobs are common enough among a focused user group; existing logs, cron alerts, and generic uptime monitors leave an important visibility gap; and teams will pay or switch tools for progress-aware status rather than merely wanting better notifications.
 
-No customer interviews, integrations, usage data, or willingness-to-pay evidence has been collected yet. All claims below beyond the stated context are hypotheses.
+No qualifying customer interviews, real-job integrations, usage data, or willingness-to-pay evidence has been collected yet. The recorded adjacent conversation does not meet the 20–90 minute screen. All claims below beyond the stated context are hypotheses.
 
 ## Primary target user
 
