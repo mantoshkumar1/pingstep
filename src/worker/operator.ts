@@ -40,7 +40,7 @@ function createViewerToken(): string {
   return `ps_view_${Array.from(bytes).map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
 }
 
-export async function provisionJob(repository: PingStepD1Repository, rawInput: unknown) {
+export async function provisionJob(repository: PingStepD1Repository, rawInput: unknown, ownerUserId: string | null = null) {
   if (!rawInput || typeof rawInput !== 'object' || Array.isArray(rawInput)) throw new HttpError(400, 'Job configuration must be a JSON object.');
   const input = rawInput as JobInput;
   if (typeof input.job_key !== 'string' || !/^[a-z0-9][a-z0-9._-]{1,100}$/i.test(input.job_key)) {
@@ -57,6 +57,7 @@ export async function provisionJob(repository: PingStepD1Repository, rawInput: u
     job_key: input.job_key,
     token_hash: await hash(token),
     viewer_token_hash: await hash(viewerToken),
+    owner_user_id: ownerUserId,
     expected_update_interval_seconds: interval ?? 60,
     liveness_grace_seconds: livenessGrace ?? 120,
     expected_duration_seconds: expectedDuration,
