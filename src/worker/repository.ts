@@ -399,10 +399,26 @@ export class PingStepD1Repository {
     return result.results;
   }
 
+  async listLateRuns(now: string): Promise<RunProjection[]> {
+    const result = await this.db.prepare(`
+      SELECT * FROM runs
+      WHERE status = 'running' AND is_late = 0 AND late_deadline IS NOT NULL AND late_deadline <= ?
+    `).bind(now).all<RunProjection>();
+    return result.results;
+  }
+
   async markRunStale(run: RunProjection, now: string): Promise<boolean> {
     const result = await this.db.prepare(`
       UPDATE runs SET status = 'stale', stale_at = ?, stale_transitions = stale_transitions + 1
       WHERE job_key = ? AND run_id = ? AND status = 'running'
+    `).bind(now, run.job_key, run.run_id).run();
+    return result.meta.changes === 1;
+  }
+
+  async markRunLate(run: RunProjection, now: string): Promise<boolean> {
+    const result = await this.db.prepare(`
+      UPDATE runs SET is_late = 1, late_at = ?, late_transitions = late_transitions + 1
+      WHERE job_key = ? AND run_id = ? AND status = 'running' AND is_late = 0
     `).bind(now, run.job_key, run.run_id).run();
     return result.meta.changes === 1;
   }

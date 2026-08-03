@@ -264,8 +264,8 @@ export default {
     const expiredPendingEvents = await repository.expirePendingEvents(now);
     const expiredOAuthStates = await repository.deleteExpiredOAuthStates(now);
     const expiredSessions = await repository.deleteExpiredSessions(now);
-    const changed = await new HostedPingStepService(repository).reconcile();
+    const reconciled = await new HostedPingStepService(repository).reconcile();
     const delivered = await deliverPendingAlerts(repository, env);
-    console.log(JSON.stringify({ event: 'scheduled_reconcile', stale_runs_marked: changed, alerts_delivered: delivered, expired_pending_events: expiredPendingEvents, expired_oauth_states: expiredOAuthStates, expired_sessions: expiredSessions }));
+    console.log(JSON.stringify({ event: 'scheduled_reconcile', stale_runs_marked: reconciled.stale, late_runs_marked: reconciled.late, alerts_delivered: delivered, expired_pending_events: expiredPendingEvents, expired_oauth_states: expiredOAuthStates, expired_sessions: expiredSessions }));
   }
 } satisfies ExportedHandler<Env>;
