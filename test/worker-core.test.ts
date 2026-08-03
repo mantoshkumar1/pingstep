@@ -367,3 +367,13 @@ test('the billing portal selects the active subscription over a newer incomplete
     globalThis.fetch = originalFetch;
   }
 });
+
+test('startOAuth redirects to /app?auth_error=1 when the provider client ID is missing', async () => {
+  const { startOAuth } = await import('../src/worker/accounts.ts');
+  const env = { PUBLIC_ORIGIN: 'https://pingstep.dev' } as Env;
+  const repository = new MemoryRepository();
+  const request = new Request('https://pingstep.dev/v1/auth/github');
+  const response = await startOAuth(request, env, repository as unknown as PingStepD1Repository, 'github');
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get('location'), 'https://pingstep.dev/app?auth_error=1');
+});
