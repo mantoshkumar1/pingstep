@@ -29,8 +29,10 @@ async function notifyByEmail(env: Env, record: FeedbackRecord): Promise<void> {
   if (!emailBinding || typeof emailBinding.send !== 'function') return;
   try {
     const { EmailMessage } = await import('cloudflare:email');
+    const notifyEmail = Reflect.get(env, 'FEEDBACK_NOTIFY_EMAIL');
+    if (typeof notifyEmail !== 'string' || notifyEmail.length === 0) return;
     const from = 'feedback@pingstep.dev';
-    const to = 'mantoshk234@gmail.com';
+    const to = notifyEmail;
     const subject = `PingStep feedback${record.email ? ` from ${record.email}` : ' (anonymous)'}`;
     const body = [
       `Message: ${record.message}`,

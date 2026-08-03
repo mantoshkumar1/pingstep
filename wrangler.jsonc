@@ -48,7 +48,8 @@
   },
   "vars": {
     "ENVIRONMENT": "production",
-    "PUBLIC_ORIGIN": "https://pingstep.dev"
+    "PUBLIC_ORIGIN": "https://pingstep.dev",
+    "FEEDBACK_NOTIFY_EMAIL": "mantoshk234@gmail.com"
   },
   "env": {
     "staging": {
@@ -65,7 +66,8 @@
       ],
       "vars": {
         "ENVIRONMENT": "staging",
-        "PUBLIC_ORIGIN": "https://pingstep-staging.mantoshk234.workers.dev"
+        "PUBLIC_ORIGIN": "https://pingstep-staging.mantoshk234.workers.dev",
+        "FEEDBACK_NOTIFY_EMAIL": "mantoshk234@gmail.com"
       },
       "send_email": [
         {
