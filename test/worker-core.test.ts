@@ -52,6 +52,13 @@ class MemoryRepository {
       .sort((left, right) => left.sequence - right.sequence || left.received_at.localeCompare(right.received_at));
   }
   async listExpiredRuns(at: string) { return [...this.runs.values()].filter((run) => run.status === 'running' && !!run.liveness_deadline && run.liveness_deadline <= at); }
+  async listLateRuns(at: string) { return [...this.runs.values()].filter((run) => run.status === 'running' && run.is_late === 0 && !!run.late_deadline && run.late_deadline <= at); }
+  async markRunLate(run: RunProjection, at: string) {
+    const stored = this.runs.get(this.key(run.job_key, run.run_id));
+    if (!stored || stored.status !== 'running' || stored.is_late !== 0) return false;
+    this.runs.set(this.key(run.job_key, run.run_id), { ...stored, is_late: 1, late_at: at, late_transitions: stored.late_transitions + 1 });
+    return true;
+  }
   async markRunStale(run: RunProjection, at: string) {
     const stored = this.runs.get(this.key(run.job_key, run.run_id));
     if (!stored || stored.status !== 'running') return false;
@@ -141,8 +148,8 @@ test('stale reconciliation creates one alert and never repeats it', async () => 
   const service = new HostedPingStepService(repository as unknown as PingStepD1Repository, () => clock);
   await service.ingest(event(), 'job-secret');
   clock = new Date('2026-08-02T00:01:30.000Z');
-  assert.equal(await service.reconcile(), 1);
-  assert.equal(await service.reconcile(), 0);
+  assert.deepEqual(await service.reconcile(), { stale: 1, late: 0 });
+  assert.deepEqual(await service.reconcile(), { stale: 0, late: 0 });
   assert.equal((await repository.getRun('nightly', 'run-1'))?.status, 'stale');
   assert.equal(repository.alerts.length, 1);
 });
@@ -366,6 +373,102 @@ test('the billing portal selects the active subscription over a newer incomplete
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('late reconciliation fires an alert when a run exceeds its late deadline', async () => {
+  const repository = new MemoryRepository();
+  repository.jobs.set('deploy', {
+    job_key: 'deploy', token_hash: await hash('job-secret'), viewer_token_hash: await hash('viewer-secret'), owner_user_id: 'user-1',
+    expected_update_interval_seconds: 60, liveness_grace_seconds: 30, expected_duration_seconds: 300, late_grace_seconds: 60
+  });
+  let clock = now;
+  const service = new HostedPingStepService(repository as unknown as PingStepD1Repository, () => clock);
+  await service.ingest({ event_id: 'e1', job_key: 'deploy', run_id: 'run-1', sequence: 1, type: 'started', occurred_at: clock.toISOString(), data: {} }, 'job-secret');
+  // Heartbeat to keep the run alive (not stale) past the late deadline
+  clock = new Date('2026-08-02T00:05:00.000Z');
+  await service.ingest({ event_id: 'e2', job_key: 'deploy', run_id: 'run-1', sequence: 2, type: 'heartbeat', occurred_at: clock.toISOString(), data: {} }, 'job-secret');
+  // Now advance past late_deadline (started + 300 + 60 = 360s = 6 min)
+  clock = new Date('2026-08-02T00:06:01.000Z');
+  const result = await service.reconcile();
+  assert.equal(result.late, 1);
+  assert.equal(result.stale, 0);
+  const run = await repository.getRun('deploy', 'run-1');
+  assert.equal(run?.is_late, 1);
+  assert.equal(run?.status, 'running');
+  assert.equal(run?.late_at, '2026-08-02T00:06:01.000Z');
+  const lateAlert = repository.alerts.find((a) => a.type === 'late');
+  assert.ok(lateAlert);
+  assert.equal(lateAlert.status, 'running');
+  assert.equal(lateAlert.message, 'Run is still active past the expected duration plus late grace period.');
+});
+
+test('late alert is not repeated on subsequent reconciliation', async () => {
+  const repository = new MemoryRepository();
+  repository.jobs.set('deploy', {
+    job_key: 'deploy', token_hash: await hash('job-secret'), viewer_token_hash: await hash('viewer-secret'), owner_user_id: 'user-1',
+    expected_update_interval_seconds: 60, liveness_grace_seconds: 30, expected_duration_seconds: 300, late_grace_seconds: 60
+  });
+  let clock = now;
+  const service = new HostedPingStepService(repository as unknown as PingStepD1Repository, () => clock);
+  await service.ingest({ event_id: 'e1', job_key: 'deploy', run_id: 'run-1', sequence: 1, type: 'started', occurred_at: clock.toISOString(), data: {} }, 'job-secret');
+  clock = new Date('2026-08-02T00:05:30.000Z');
+  await service.ingest({ event_id: 'e2', job_key: 'deploy', run_id: 'run-1', sequence: 2, type: 'heartbeat', occurred_at: clock.toISOString(), data: {} }, 'job-secret');
+  clock = new Date('2026-08-02T00:06:01.000Z');
+  assert.equal((await service.reconcile()).late, 1);
+  assert.equal((await service.reconcile()).late, 0);
+  assert.equal(repository.alerts.filter((a) => a.type === 'late').length, 1);
+});
+
+test('a run without expected_duration_seconds is never flagged late', async () => {
+  const repository = await repositoryForService(); // nightly job has expected_duration_seconds: null
+  let clock = now;
+  const service = new HostedPingStepService(repository as unknown as PingStepD1Repository, () => clock);
+  await service.ingest(event(), 'job-secret');
+  // Heartbeat to keep alive, advance well past any reasonable duration
+  clock = new Date('2026-08-02T01:00:00.000Z');
+  await service.ingest(event({ event_id: 'e2', sequence: 2, type: 'heartbeat', occurred_at: clock.toISOString() }), 'job-secret');
+  clock = new Date('2026-08-02T02:00:00.000Z');
+  const result = await service.reconcile();
+  assert.equal(result.late, 0);
+  const run = await repository.getRun('nightly', 'run-1');
+  assert.equal(run?.is_late, 0);
+});
+
+test('a terminal event prevents a late alert from firing', async () => {
+  const repository = new MemoryRepository();
+  repository.jobs.set('deploy', {
+    job_key: 'deploy', token_hash: await hash('job-secret'), viewer_token_hash: await hash('viewer-secret'), owner_user_id: 'user-1',
+    expected_update_interval_seconds: 60, liveness_grace_seconds: 30, expected_duration_seconds: 300, late_grace_seconds: 60
+  });
+  let clock = now;
+  const service = new HostedPingStepService(repository as unknown as PingStepD1Repository, () => clock);
+  await service.ingest({ event_id: 'e1', job_key: 'deploy', run_id: 'run-1', sequence: 1, type: 'started', occurred_at: clock.toISOString(), data: {} }, 'job-secret');
+  // Succeed before the late deadline
+  clock = new Date('2026-08-02T00:04:00.000Z');
+  await service.ingest({ event_id: 'e2', job_key: 'deploy', run_id: 'run-1', sequence: 2, type: 'succeeded', occurred_at: clock.toISOString(), data: { stage: 'done' } }, 'job-secret');
+  // Advance past when late_deadline would have been
+  clock = new Date('2026-08-02T00:07:00.000Z');
+  const result = await service.reconcile();
+  assert.equal(result.late, 0);
+  assert.equal(repository.alerts.filter((a) => a.type === 'late').length, 0);
+});
+
+test('stale and late fire independently — stale prevents late on the same run', async () => {
+  const repository = new MemoryRepository();
+  repository.jobs.set('deploy', {
+    job_key: 'deploy', token_hash: await hash('job-secret'), viewer_token_hash: await hash('viewer-secret'), owner_user_id: 'user-1',
+    expected_update_interval_seconds: 60, liveness_grace_seconds: 30, expected_duration_seconds: 300, late_grace_seconds: 60
+  });
+  let clock = now;
+  const service = new HostedPingStepService(repository as unknown as PingStepD1Repository, () => clock);
+  await service.ingest({ event_id: 'e1', job_key: 'deploy', run_id: 'run-1', sequence: 1, type: 'started', occurred_at: clock.toISOString(), data: {} }, 'job-secret');
+  // Advance past both liveness deadline (started + 60 + 30 = 90s) AND late deadline (started + 300 + 60 = 360s)
+  clock = new Date('2026-08-02T00:07:00.000Z');
+  const result = await service.reconcile();
+  // Stale fires (run goes stale), but late won't fire because the run is now stale (not running)
+  assert.equal(result.stale, 1);
+  assert.equal(result.late, 0);
+  assert.equal((await repository.getRun('deploy', 'run-1'))?.status, 'stale');
 });
 
 test('startOAuth redirects to /app?auth_error=1 when the provider client ID is missing', async () => {

@@ -140,13 +140,12 @@ export class HostedPingStepService {
     return run;
   }
 
-  async reconcile(): Promise<number> {
+  async reconcile(): Promise<{ stale: number; late: number }> {
     const now = this.now().toISOString();
-    const expired = await this.repository.listExpiredRuns(now);
-    let changed = 0;
-    for (const run of expired) {
+    let stale = 0;
+    for (const run of await this.repository.listExpiredRuns(now)) {
       if (!await this.repository.markRunStale(run, now)) continue;
-      changed += 1;
+      stale += 1;
       await this.repository.createAlert({
         id: `${run.job_key}:${run.run_id}:stale:${run.stale_transitions + 1}`,
         type: 'stale', job_key: run.job_key, run_id: run.run_id, status: 'stale',
@@ -155,6 +154,18 @@ export class HostedPingStepService {
         created_at: now, delivery_status: 'pending', attempts: 0
       });
     }
-    return changed;
+    let late = 0;
+    for (const run of await this.repository.listLateRuns(now)) {
+      if (!await this.repository.markRunLate(run, now)) continue;
+      late += 1;
+      await this.repository.createAlert({
+        id: `${run.job_key}:${run.run_id}:late:${run.late_transitions + 1}`,
+        type: 'late', job_key: run.job_key, run_id: run.run_id, status: 'running',
+        current_step: run.current_step,
+        message: 'Run is still active past the expected duration plus late grace period.',
+        created_at: now, delivery_status: 'pending', attempts: 0
+      });
+    }
+    return { stale, late };
   }
 }
