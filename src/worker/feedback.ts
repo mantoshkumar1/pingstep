@@ -11,9 +11,41 @@ async function sha256Hex(value: string): Promise<string> {
   return Array.from(bytes).map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-function secret(env: Env, name: string): string | undefined {
-  const value = Reflect.get(env, name);
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
+function buildMimeMessage(from: string, to: string, subject: string, body: string): string {
+  return [
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=utf-8',
+    `Date: ${new Date().toUTCString()}`,
+    '',
+    body
+  ].join('\r\n');
+}
+
+async function notifyByEmail(env: Env, record: FeedbackRecord): Promise<void> {
+  const emailBinding = Reflect.get(env, 'FEEDBACK_EMAIL') as { send(msg: unknown): Promise<void> } | undefined;
+  if (!emailBinding || typeof emailBinding.send !== 'function') return;
+  try {
+    const { EmailMessage } = await import('cloudflare:email');
+    const from = 'feedback@pingstep.dev';
+    const to = 'mantoshk234@gmail.com';
+    const subject = `PingStep feedback${record.email ? ` from ${record.email}` : ' (anonymous)'}`;
+    const body = [
+      `Message: ${record.message}`,
+      `Email: ${record.email ?? '(anonymous)'}`,
+      `Page: ${record.page ?? '(none)'}`,
+      `Time: ${record.created_at}`,
+      `ID: ${record.id}`
+    ].join('\n');
+
+    const raw = buildMimeMessage(from, to, subject, body);
+    const msg = new EmailMessage(from, to, new TextEncoder().encode(raw));
+    await emailBinding.send(msg);
+  } catch {
+    // Email failure is not user-facing — feedback is already saved in D1
+  }
 }
 
 export async function submitFeedback(
@@ -64,32 +96,7 @@ export async function submitFeedback(
   };
 
   await insertFeedback(db, record);
-
-  // Fire-and-forget webhook notification
-  const webhookUrl = secret(env, 'FEEDBACK_WEBHOOK_URL');
-  if (webhookUrl) {
-    const webhookToken = secret(env, 'FEEDBACK_WEBHOOK_TOKEN');
-    try {
-      await fetch(webhookUrl, {
-        method: 'POST',
-        signal: AbortSignal.timeout(5_000),
-        headers: {
-          'content-type': 'application/json',
-          ...(webhookToken ? { authorization: `Bearer ${webhookToken}` } : {})
-        },
-        body: JSON.stringify({
-          type: 'feedback',
-          id: record.id,
-          message: record.message,
-          email: record.email ?? '(anonymous)',
-          page: record.page,
-          created_at: record.created_at
-        })
-      });
-    } catch {
-      // Feedback is saved regardless — webhook failure is not user-facing
-    }
-  }
+  await notifyByEmail(env, record);
 
   return { ok: true };
 }

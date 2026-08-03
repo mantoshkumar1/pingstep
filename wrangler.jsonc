@@ -3,11 +3,19 @@
   "name": "pingstep",
   "main": "src/worker.ts",
   "compatibility_date": "2026-08-01",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "workers_dev": false,
   "routes": [
-    { "pattern": "pingstep.dev", "custom_domain": true },
-    { "pattern": "www.pingstep.dev", "custom_domain": true }
+    {
+      "pattern": "pingstep.dev",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.pingstep.dev",
+      "custom_domain": true
+    }
   ],
   "observability": {
     "enabled": true,
@@ -16,7 +24,12 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/", "/app", "/status", "/index.html"],
+    "run_worker_first": [
+      "/",
+      "/app",
+      "/status",
+      "/index.html"
+    ],
     "html_handling": "none",
     "not_found_handling": "404-page"
   },
@@ -29,7 +42,9 @@
     }
   ],
   "triggers": {
-    "crons": ["* * * * *"]
+    "crons": [
+      "* * * * *"
+    ]
   },
   "vars": {
     "ENVIRONMENT": "production",
@@ -51,7 +66,19 @@
       "vars": {
         "ENVIRONMENT": "staging",
         "PUBLIC_ORIGIN": "https://pingstep-staging.mantoshk234.workers.dev"
-      }
+      },
+      "send_email": [
+        {
+          "name": "FEEDBACK_EMAIL",
+          "destination_address": "mantoshk234@gmail.com"
+        }
+      ]
     }
-  }
+  },
+  "send_email": [
+    {
+      "name": "FEEDBACK_EMAIL",
+      "destination_address": "mantoshk234@gmail.com"
+    }
+  ]
 }
