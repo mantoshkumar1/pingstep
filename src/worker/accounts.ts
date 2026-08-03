@@ -69,7 +69,7 @@ async function establishSession(repository: PingStepD1Repository, user: Account)
 export async function startOAuth(request: Request, env: Env, repository: PingStepD1Repository, providerName: string): Promise<Response> {
   const provider = providerFrom(providerName);
   const clientId = secret(env, provider === 'github' ? 'GITHUB_CLIENT_ID' : 'GOOGLE_CLIENT_ID');
-  if (!clientId) throw new HttpError(503, `${provider === 'github' ? 'GitHub' : 'Google'} sign-in is not configured yet.`);
+  if (!clientId) return accountErrorRedirect(env);
   const state = randomToken('ps_oauth');
   await repository.createOAuthState(state, provider, new Date(Date.now() + 10 * 60 * 1000).toISOString());
   const authorize = new URL(provider === 'github' ? 'https://github.com/login/oauth/authorize' : 'https://accounts.google.com/o/oauth2/v2/auth');

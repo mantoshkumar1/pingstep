@@ -11,6 +11,7 @@ import { deliverPendingAlerts } from './worker/alerts.ts';
 import { completeOAuth, currentAccount, requireAccount, requireSameOrigin, signOut, startOAuth } from './worker/accounts.ts';
 import { policyFor, rollingWindowStart, type PlanCode } from './worker/plans.ts';
 import { createCheckout, createPortal, handleStripeWebhook } from './worker/billing.ts';
+import { submitFeedback } from './worker/feedback.ts';
 
 const json = (body: unknown, status = 200, headers: HeadersInit = {}) => Response.json(body, {
   status,
@@ -239,6 +240,10 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     const token = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? null;
     const result = await service.ingest(await readJsonBody(request, MAX_EVENT_BODY_BYTES), token);
     return json(result, result.duplicate ? 200 : 202);
+  }
+  if (request.method === 'POST' && url.pathname === '/v1/feedback') {
+    const clientIp = request.headers.get('cf-connecting-ip');
+    return json(await submitFeedback(env.DB, env, await readJsonBody(request, MAX_CONTROL_BODY_BYTES), clientIp));
   }
   if (url.pathname.startsWith('/v1/')) {
     return json({ error: 'API endpoint not found.' }, 404);

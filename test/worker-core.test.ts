@@ -470,3 +470,63 @@ test('stale and late fire independently — stale prevents late on the same run'
   assert.equal(result.late, 0);
   assert.equal((await repository.getRun('deploy', 'run-1'))?.status, 'stale');
 });
+
+test('startOAuth redirects to /app?auth_error=1 when the provider client ID is missing', async () => {
+  const { startOAuth } = await import('../src/worker/accounts.ts');
+  const env = { PUBLIC_ORIGIN: 'https://pingstep.dev' } as Env;
+  const repository = new MemoryRepository();
+  const request = new Request('https://pingstep.dev/v1/auth/github');
+  const response = await startOAuth(request, env, repository as unknown as PingStepD1Repository, 'github');
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get('location'), 'https://pingstep.dev/app?auth_error=1');
+});
+
+test('feedback submission validates input and stores in D1', async () => {
+  const { submitFeedback } = await import('../src/worker/feedback.ts');
+  await assert.rejects(() => submitFeedback({} as D1Database, {} as Env, {}, null), { message: 'Message is required.' });
+  await assert.rejects(() => submitFeedback({} as D1Database, {} as Env, { message: '' }, null), { message: 'Message is required.' });
+  await assert.rejects(() => submitFeedback({} as D1Database, {} as Env, { message: 'x'.repeat(2001) }, null), { message: /2000 characters/ });
+  await assert.rejects(() => submitFeedback({} as D1Database, {} as Env, { message: 'bug', email: 'not-an-email' }, null), { message: 'Email address is not valid.' });
+});
+
+test('feedback submission stores record and returns ok', async () => {
+  const { submitFeedback } = await import('../src/worker/feedback.ts');
+  const stored: Array<{ query: string; bindings: unknown[] }> = [];
+  const mockDb = {
+    prepare(query: string) {
+      return {
+        bind(...bindings: unknown[]) {
+          stored.push({ query, bindings });
+          return { run: async () => ({ success: true }), first: async () => ({ count: 0 }) };
+        }
+      };
+    }
+  } as unknown as D1Database;
+  const result = await submitFeedback(mockDb, {} as Env, { message: 'Great tool!' }, '127.0.0.1');
+  assert.deepEqual(result, { ok: true });
+  assert.equal(stored.length, 2);
+  assert.ok(stored[1].query.includes('INSERT INTO feedback'));
+  assert.equal(stored[1].bindings[1], 'Great tool!');
+  assert.equal(stored[1].bindings[2], null);
+});
+
+test('feedback submission calls email binding when configured', async () => {
+  const { submitFeedback } = await import('../src/worker/feedback.ts');
+  const stored: Array<{ query: string; bindings: unknown[] }> = [];
+  const mockDb = {
+    prepare(query: string) {
+      return {
+        bind(...bindings: unknown[]) {
+          stored.push({ query, bindings });
+          return { run: async () => ({ success: true }), first: async () => ({ count: 0 }) };
+        }
+      };
+    }
+  } as unknown as D1Database;
+  const env = { FEEDBACK_EMAIL: { send: async () => {} } } as unknown as Env;
+  await submitFeedback(mockDb, env, { message: 'Need help', email: 'user@test.com' }, '127.0.0.1');
+  assert.equal(stored.length, 2);
+  assert.ok(stored[1].query.includes('INSERT INTO feedback'));
+  assert.equal(stored[1].bindings[1], 'Need help');
+  assert.equal(stored[1].bindings[2], 'user@test.com');
+});

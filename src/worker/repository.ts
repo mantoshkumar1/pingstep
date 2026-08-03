@@ -496,3 +496,25 @@ export class PingStepD1Repository {
     ).run();
   }
 }
+
+export type FeedbackRecord = {
+  id: string;
+  message: string;
+  email: string | null;
+  page: string | null;
+  ip_hash: string | null;
+  created_at: string;
+};
+
+export async function insertFeedback(db: D1Database, record: FeedbackRecord): Promise<void> {
+  await db.prepare(
+    'INSERT INTO feedback (id, message, email, page, ip_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(record.id, record.message, record.email, record.page, record.ip_hash, record.created_at).run();
+}
+
+export async function countRecentFeedbackByIp(db: D1Database, ipHash: string, since: string): Promise<number> {
+  const result = await db.prepare(
+    'SELECT COUNT(*) as count FROM feedback WHERE ip_hash = ? AND created_at > ?'
+  ).bind(ipHash, since).first<{ count: number }>();
+  return result?.count ?? 0;
+}
