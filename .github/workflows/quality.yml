@@ -4,6 +4,12 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_staging_e2e:
+        description: 'Run staging e2e late-run test'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -11,6 +17,7 @@ permissions:
 jobs:
   verify:
     name: Test, coverage, and Worker build
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -60,3 +67,44 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  e2e-late-run:
+    name: Verify late-run detection on staging
+    needs: deploy-staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    concurrency:
+      group: pingstep-staging-e2e
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - name: Run late-run e2e test against staging
+        run: node scripts/verify-late-run-staging.mjs
+        env:
+          PINGSTEP_STAGING_BASE_URL: https://pingstep-staging.mantoshk234.workers.dev
+          PINGSTEP_STAGING_OPERATOR_TOKEN: ${{ secrets.PINGSTEP_STAGING_OPERATOR_TOKEN }}
+          E2E_RUN_SUFFIX: gh-${{ github.run_id }}-${{ github.run_attempt }}
+
+  e2e-late-run-manual:
+    name: Verify late-run detection on staging (manual)
+    if: github.event_name == 'workflow_dispatch' && inputs.run_staging_e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    concurrency:
+      group: pingstep-staging-e2e
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - name: Run late-run e2e test against staging
+        run: node scripts/verify-late-run-staging.mjs
+        env:
+          PINGSTEP_STAGING_BASE_URL: https://pingstep-staging.mantoshk234.workers.dev
+          PINGSTEP_STAGING_OPERATOR_TOKEN: ${{ secrets.PINGSTEP_STAGING_OPERATOR_TOKEN }}
+          E2E_RUN_SUFFIX: manual-${{ github.run_id }}-${{ github.run_attempt }}
