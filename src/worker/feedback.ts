@@ -43,7 +43,7 @@ async function notifyByEmail(env: Env, record: FeedbackRecord): Promise<void> {
     ].join('\n');
 
     const raw = buildMimeMessage(from, to, subject, body);
-    const msg = new EmailMessage(from, to, new TextEncoder().encode(raw));
+    const msg = new EmailMessage(from, to, raw);
     await emailBinding.send(msg);
   } catch {
     // Email failure is not user-facing — feedback is already saved in D1
