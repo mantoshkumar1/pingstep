@@ -14,7 +14,16 @@ PingStep has three deliberately separate environments:
 - **Staging** — [pingstep-staging.mantoshk234.workers.dev](https://pingstep-staging.mantoshk234.workers.dev) uses a separate Worker and D1 database. Use it for manual product checks and Stripe Test-mode billing checks. Deploy with `npm run worker:deploy:staging` only after the full test suite passes.
 - **Production** — [pingstep.dev](https://pingstep.dev) is for real users and live Stripe billing only.
 
-Pull requests run the full quality gate, including dry-runs for both production and staging. After a merge to `main`, GitHub updates staging only after those checks pass. Production never deploys automatically: check staging first, then start the **Release PingStep to production** GitHub workflow, type `RELEASE`, and approve the protected production environment. That workflow rechecks `main` before deploying. The Cloudflare deployment credential is kept only as a GitHub Actions secret.
+Pull requests run the full quality gate, including dry-runs for both production and staging. After a merge to `main`, GitHub updates staging only after those checks pass. Production never deploys automatically; it uses named version tags:
+
+1. Merge your PR to `main` and wait for staging to deploy successfully.
+2. Verify the change on [staging](https://pingstep-staging.mantoshk234.workers.dev).
+3. Tag the release: `git tag v0.2.0 && git push origin v0.2.0` (use [semver](https://semver.org)).
+4. Start the **Release PingStep to production** workflow, enter the tag name (e.g. `v0.2.0`), and approve the protected production environment.
+5. The workflow validates the tag is semver and is on `main`, reruns the full test suite at that tag, then deploys.
+6. To roll back, run the workflow again with a previous tag (e.g. `v0.1.0`).
+
+The running version is visible at `/health` and `/v1/version` (environment, tag, and short commit hash), and in the dashboard footer. The Cloudflare deployment credential is kept only as a GitHub Actions secret.
 
 Staging must never use production credentials, production D1, or production routes. Its configuration explicitly has an empty route list, which prevents it from claiming `pingstep.dev`.
 

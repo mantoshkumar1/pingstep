@@ -1,5 +1,8 @@
 /// <reference path="../worker-configuration.d.ts" />
 
+// Vars injected at deploy time via --var; not in wrangler.jsonc.
+declare global { interface Env { RELEASE_VERSION?: string; RELEASE_SHA?: string; } }
+
 import { PingStepD1Repository } from './worker/repository.ts';
 import { HostedPingStepService, HttpError } from './worker/service.ts';
 import { requireOperator, requireReadAccess } from './worker/auth.ts';
@@ -59,7 +62,20 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     return new Response('Not found', { status: 404 });
   }
   if (request.method === 'GET' && url.pathname === '/health') {
-    return json({ status: 'ok', storage: 'd1' });
+    return json({
+      status: 'ok',
+      storage: 'd1',
+      environment: env.ENVIRONMENT ?? 'unknown',
+      version: env.RELEASE_VERSION ?? null,
+      commit: env.RELEASE_SHA ? env.RELEASE_SHA.slice(0, 7) : null
+    });
+  }
+  if (request.method === 'GET' && url.pathname === '/v1/version') {
+    return json({
+      environment: env.ENVIRONMENT ?? 'unknown',
+      version: env.RELEASE_VERSION ?? null,
+      commit: env.RELEASE_SHA ? env.RELEASE_SHA.slice(0, 7) : null
+    });
   }
   if (request.method === 'GET' && url.pathname === '/v1/auth/me') {
     return json({ user: await currentAccount(request, new PingStepD1Repository(env.DB)) });

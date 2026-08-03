@@ -3,8 +3,8 @@ name: Release PingStep to production
 on:
   workflow_dispatch:
     inputs:
-      confirmation:
-        description: Type RELEASE to confirm a production release of main
+      tag:
+        description: Release tag to deploy (e.g. v0.2.0). Must be a semver tag on main.
         required: true
         type: string
 
@@ -17,14 +17,31 @@ concurrency:
 
 jobs:
   verify:
-    name: Recheck main before release
-    if: inputs.confirmation == 'RELEASE'
+    name: Validate tag and recheck before release
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+      - name: Validate tag
+        run: |
+          TAG="${{ inputs.tag }}"
+          if ! echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$'; then
+            echo "::error::Tag '$TAG' is not a valid semver tag (expected vX.Y.Z)."
+            exit 1
+          fi
+          if ! git tag --list "$TAG" | grep -q .; then
+            echo "::error::Tag '$TAG' does not exist."
+            exit 1
+          fi
+          TAG_SHA=$(git rev-list -n 1 "$TAG")
+          if ! git merge-base --is-ancestor "$TAG_SHA" origin/main; then
+            echo "::error::Tag '$TAG' is not on main."
+            exit 1
+          fi
+          echo "Releasing $TAG (commit ${TAG_SHA:0:7})"
       - uses: actions/setup-node@v7
         with:
           node-version: 26
@@ -38,7 +55,7 @@ jobs:
       - run: npm run worker:deploy:dry-run
 
   deploy:
-    name: Release reviewed main to pingstep.dev
+    name: Release ${{ inputs.tag }} to pingstep.dev
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -48,7 +65,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ inputs.tag }}
       - uses: actions/setup-node@v7
         with:
           node-version: 26
@@ -59,8 +76,11 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      - name: Deploy the reviewed build to pingstep.dev
-        run: npm run worker:deploy:production
+      - name: Deploy the tagged release to pingstep.dev
+        run: >-
+          npx wrangler deploy --env=''
+          --var RELEASE_VERSION:${{ inputs.tag }}
+          --var RELEASE_SHA:$(git rev-parse HEAD | head -c 7)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
