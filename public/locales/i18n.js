@@ -31,7 +31,8 @@
         'Your first run in four steps': 'Su primera ejecución en cuatro pasos', 'Create a job': 'Crear una tarea', 'Copy its token': 'Copiar su token', 'Send an event': 'Enviar un evento', 'See the run here': 'Ver la ejecución aquí',
         'Job key': 'Clave de tarea', 'Expected update interval (seconds)': 'Intervalo esperado de actualización (segundos)', 'Liveness grace (seconds)': 'Margen de actividad (segundos)',
         'Copy token': 'Copiar token', 'Copied': 'Copiado', 'Runs': 'Ejecuciones', 'Run status': 'Estado', 'Last reported stage': 'Última etapa informada', 'Last update': 'Última actualización',
-        'No jobs yet': 'Aún no hay tareas', 'No stage reported yet': 'Aún no hay etapa informada', 'Language': 'Idioma', 'Pricing': 'Precios', 'Docs': 'Documentación', 'Security': 'Seguridad', 'Privacy': 'Privacidad', 'Terms': 'Términos', 'Contact': 'Contacto', 'Status': 'Estado'
+        'No jobs yet': 'Aún no hay tareas', 'No stage reported yet': 'Aún no hay etapa informada', 'Simple plans. No surprise usage bill.': 'Planes simples. Sin facturas de uso inesperadas.', 'Start free, then pay only for the capacity you use.': 'Comience gratis y luego pague solo por la capacidad que use.', 'Try PingStep on a real job and see if it helps.': 'Pruebe PingStep con una tarea real y vea si ayuda.', 'Dependable visibility for one engineer or a small team.': 'Visibilidad fiable para un ingeniero o un equipo pequeño.', 'Start free': 'Comenzar gratis', 'Choose Pro': 'Elegir Pro', 'Choose Team': 'Elegir Team', 'View full pricing →': 'Ver precios completos →',
+        'Language': 'Idioma', 'Pricing': 'Precios', 'Docs': 'Documentación', 'Security': 'Seguridad', 'Privacy': 'Privacidad', 'Terms': 'Términos', 'Contact': 'Contacto', 'Status': 'Estado'
       }
     },
     'pt-BR': {
@@ -64,7 +65,8 @@
         'Your first run in four steps': 'Sua primeira execução em quatro passos', 'Create a job': 'Criar um trabalho', 'Copy its token': 'Copiar seu token', 'Send an event': 'Enviar um evento', 'See the run here': 'Ver a execução aqui',
         'Job key': 'Chave do trabalho', 'Expected update interval (seconds)': 'Intervalo esperado de atualização (segundos)', 'Liveness grace (seconds)': 'Margem de atividade (segundos)',
         'Copy token': 'Copiar token', 'Copied': 'Copiado', 'Runs': 'Execuções', 'Run status': 'Status da execução', 'Last reported stage': 'Última etapa informada', 'Last update': 'Última atualização',
-        'No jobs yet': 'Ainda não há trabalhos', 'No stage reported yet': 'Nenhuma etapa informada ainda', 'Language': 'Idioma', 'Pricing': 'Preços', 'Docs': 'Documentação', 'Security': 'Segurança', 'Privacy': 'Privacidade', 'Terms': 'Termos', 'Contact': 'Contato', 'Status': 'Status'
+        'No jobs yet': 'Ainda não há trabalhos', 'No stage reported yet': 'Nenhuma etapa informada ainda', 'Simple plans. No surprise usage bill.': 'Planos simples. Sem cobrança surpresa de uso.', 'Start free, then pay only for the capacity you use.': 'Comece grátis e depois pague apenas pela capacidade que usar.', 'Try PingStep on a real job and see if it helps.': 'Experimente o PingStep com um trabalho real e veja se ajuda.', 'Dependable visibility for one engineer or a small team.': 'Visibilidade confiável para um engenheiro ou uma equipe pequena.', 'Start free': 'Começar grátis', 'Choose Pro': 'Escolher Pro', 'Choose Team': 'Escolher Team', 'View full pricing →': 'Ver preços completos →',
+        'Language': 'Idioma', 'Pricing': 'Preços', 'Docs': 'Documentação', 'Security': 'Segurança', 'Privacy': 'Privacidade', 'Terms': 'Termos', 'Contact': 'Contato', 'Status': 'Status'
       }
     },
     de: {
@@ -97,7 +99,8 @@
         'Your first run in four steps': 'Ihr erster Lauf in vier Schritten', 'Create a job': 'Job erstellen', 'Copy its token': 'Token kopieren', 'Send an event': 'Ereignis senden', 'See the run here': 'Lauf hier ansehen',
         'Job key': 'Job-Schlüssel', 'Expected update interval (seconds)': 'Erwartetes Aktualisierungsintervall (Sekunden)', 'Liveness grace (seconds)': 'Aktivitäts-Puffer (Sekunden)',
         'Copy token': 'Token kopieren', 'Copied': 'Kopiert', 'Runs': 'Läufe', 'Run status': 'Laufstatus', 'Last reported stage': 'Zuletzt gemeldete Phase', 'Last update': 'Letzte Aktualisierung',
-        'No jobs yet': 'Noch keine Jobs', 'No stage reported yet': 'Noch keine Phase gemeldet', 'Language': 'Sprache', 'Pricing': 'Preise', 'Docs': 'Dokumentation', 'Security': 'Sicherheit', 'Privacy': 'Datenschutz', 'Terms': 'Nutzungsbedingungen', 'Contact': 'Kontakt', 'Status': 'Status'
+        'No jobs yet': 'Noch keine Jobs', 'No stage reported yet': 'Noch keine Phase gemeldet', 'Simple plans. No surprise usage bill.': 'Einfache Pläne. Keine überraschende Nutzungsrechnung.', 'Start free, then pay only for the capacity you use.': 'Starten Sie kostenlos und zahlen Sie dann nur für die genutzte Kapazität.', 'Try PingStep on a real job and see if it helps.': 'Testen Sie PingStep mit einem echten Job und sehen Sie, ob es hilft.', 'Dependable visibility for one engineer or a small team.': 'Verlässliche Sichtbarkeit für einen Entwickler oder ein kleines Team.', 'Start free': 'Kostenlos starten', 'Choose Pro': 'Pro wählen', 'Choose Team': 'Team wählen', 'View full pricing →': 'Alle Preise ansehen →',
+        'Language': 'Sprache', 'Pricing': 'Preise', 'Docs': 'Dokumentation', 'Security': 'Sicherheit', 'Privacy': 'Datenschutz', 'Terms': 'Nutzungsbedingungen', 'Contact': 'Kontakt', 'Status': 'Status'
       }
     }
   };
