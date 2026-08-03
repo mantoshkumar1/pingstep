@@ -3,7 +3,7 @@ import { type PlanCode } from './plans.ts';
 import { type AccountPlan, PingStepD1Repository, type StoredBillingSubscription } from './repository.ts';
 import { HttpError } from './service.ts';
 
-type StripeConfig = { secretKey: string; webhookSecret: string; proPriceId: string; teamPriceId: string; publicOrigin: string; allowPromotionCodes: boolean };
+type StripeConfig = { secretKey: string; webhookSecret: string; proPriceId: string; teamPriceId: string; publicOrigin: string; allowPromotionCodes: boolean; validationMode: boolean };
 type StripeSubscription = { id?: unknown; customer?: unknown; status?: unknown; current_period_end?: unknown; metadata?: { user_id?: unknown }; items?: { data?: Array<{ price?: { id?: unknown } }> } };
 type StripeEvent = { type?: unknown; data?: { object?: Record<string, unknown> } };
 const encoder = new TextEncoder();
@@ -20,7 +20,11 @@ function config(env: Env): StripeConfig | null {
   const proPriceId = setting(env, 'STRIPE_PRO_PRICE_ID');
   const teamPriceId = setting(env, 'STRIPE_TEAM_PRICE_ID');
   return secretKey && webhookSecret && proPriceId && teamPriceId
-    ? { secretKey, webhookSecret, proPriceId, teamPriceId, publicOrigin: env.PUBLIC_ORIGIN, allowPromotionCodes: setting(env, 'STRIPE_ALLOW_PROMOTION_CODES') === 'true' }
+    ? {
+      secretKey, webhookSecret, proPriceId, teamPriceId, publicOrigin: env.PUBLIC_ORIGIN,
+      allowPromotionCodes: setting(env, 'STRIPE_ALLOW_PROMOTION_CODES') === 'true',
+      validationMode: setting(env, 'STRIPE_BILLING_VALIDATION_MODE') === 'true'
+    }
     : null;
 }
 
@@ -114,6 +118,10 @@ export async function createCheckout(env: Env, repository: PingStepD1Repository,
     'metadata[user_id]': account.id, 'subscription_data[metadata][user_id]': account.id
   });
   if (settings.allowPromotionCodes) params.set('allow_promotion_codes', 'true');
+  // This is a short-lived, server-only live-billing verification switch. It is
+  // deliberately separate from promotion-code support so normal checkout always
+  // collects a payment method for the next subscription renewal.
+  if (settings.validationMode) params.set('payment_method_collection', 'if_required');
   const session = await stripe(settings, '/v1/checkout/sessions', params);
   if (typeof session.url !== 'string' || !session.url.startsWith('https://')) throw new HttpError(502, 'Payment service returned an invalid checkout link.');
   return { url: session.url };
