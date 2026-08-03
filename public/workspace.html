@@ -29,6 +29,6 @@ if(new URLSearchParams(location.search).get('auth_error'))$('auth-message').text
 $('manage-billing').onclick=async()=>{try{const result=await api('/v1/billing/portal',{method:'POST',body:'{}'});location.assign(result.url)}catch(error){announce(error.message)}};
 const requestedUpgrade=new URLSearchParams(location.search).get('upgrade');async function beginCheckout(plan){try{const result=await api('/v1/billing/checkout',{method:'POST',body:JSON.stringify({plan})});location.assign(result.url)}catch(error){$('billing-message').textContent=error.message;announce(error.message)}};
 load().then(()=>{if(requestedUpgrade==='pro'||requestedUpgrade==='team')beginCheckout(requestedUpgrade)}).catch(()=>{$('auth-message').textContent='PingStep could not load your session. Refresh and try again.'});
-fetch('/v1/version').then(r=>r.json()).then(v=>{const parts=[];if(v.environment)parts.push(v.environment);if(v.version)parts.push(v.version);if(v.commit)parts.push(v.commit);if(parts.length)$('version-info').textContent=parts.join(' · ')}).catch(()=>{});
+fetch('/v1/version').then(r=>r.json()).then(v=>{const el=$('version-info');if(!el)return;if(v.environment==='staging'){el.textContent='staging · '+(v.commit||'')}else if(v.version){el.textContent=v.version}}).catch(()=>{});
 </script>
 </body></html>
