@@ -18,6 +18,15 @@ test('language choice persists and the landing page is usable on a phone', async
   await expect(page.getByRole('link', { name: 'Abrir panel' })).toBeVisible();
 });
 
+test('paid plan selection goes directly from pricing to checkout', async ({ page }) => {
+  await page.route('**/v1/billing/checkout', route => route.fulfill({ json: { url: 'http://127.0.0.1:4173/checkout-started' } }));
+  await page.route('**/checkout-started', route => route.fulfill({ contentType: 'text/html', body: '<main><h1>Checkout started</h1></main>' }));
+  await page.goto('/pricing.html');
+  await page.getByRole('link', { name: 'Choose Pro' }).click();
+  await expect(page.getByRole('heading', { name: 'Checkout started' })).toBeVisible();
+  await expect(page.getByText('Create a job')).toHaveCount(0);
+});
+
 test('signed-in user can create a job without exposing workflow details', async ({ page }) => {
   await page.route('**/v1/auth/me', route => route.fulfill({ json: { user: { email: 'engineer@example.test' } } }));
   await page.route('**/v1/account/usage', route => route.fulfill({ json: { plan: 'trial' } }));
