@@ -14,7 +14,7 @@ PingStep has three deliberately separate environments:
 - **Staging** — [pingstep-staging.mantoshk234.workers.dev](https://pingstep-staging.mantoshk234.workers.dev) uses a separate Worker and D1 database. Use it for manual product checks and Stripe Test-mode billing checks. Deploy with `npm run worker:deploy:staging` only after the full test suite passes.
 - **Production** — [pingstep.dev](https://pingstep.dev) is for real users and live Stripe billing only.
 
-Pull requests run the full quality gate, including dry-runs for both production and staging. A normal merge does not deploy production. Before a meaningful customer-facing release, deploy the reviewed commit to staging with `npm run worker:deploy:staging`, test it there, then make the separate production deployment with `npm run worker:deploy:production`.
+Pull requests run the full quality gate, including dry-runs for both production and staging. After a merge to `main`, GitHub updates staging only after those checks pass. Production never deploys automatically: check staging first, then start the **Release PingStep to production** GitHub workflow, type `RELEASE`, and approve the protected production environment. That workflow rechecks `main` before deploying. The Cloudflare deployment credential is kept only as a GitHub Actions secret.
 
 Staging must never use production credentials, production D1, or production routes. Its configuration explicitly has an empty route list, which prevents it from claiming `pingstep.dev`.
 
