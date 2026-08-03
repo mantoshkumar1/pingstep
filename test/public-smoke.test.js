@@ -96,6 +96,42 @@ test('pricing keeps the trial small and the paid plans, plan changes, and self-s
   assert.match(workspace, /\$\('billing-message'\)\.textContent=error\.message/);
 });
 
+test('every public page with a navigation includes a Pricing link', async () => {
+  const pages = ['landing.html', 'pricing.html', 'contact.html', 'docs.html', 'security.html', 'privacy.html', 'terms.html', 'ai-integration.html', 'status.html'];
+  const files = await Promise.all(pages.map(publicFile));
+  for (let i = 0; i < pages.length; i++) {
+    const nav = files[i].match(/<nav[\s\S]*?<\/nav>/) || files[i].match(/<header[\s\S]*?<\/header>/);
+    assert.ok(nav, `${pages[i]} should have a nav or header element`);
+    assert.match(nav[0], /\/pricing\.html/, `${pages[i]} navigation should link to /pricing.html`);
+  }
+});
+
+test('homepage pricing section links to the full pricing page with plan summaries', async () => {
+  const landing = await publicFile('landing.html');
+  assert.match(landing, /plans-preview/);
+  assert.match(landing, /Free trial/);
+  assert.match(landing, /View full pricing/);
+  assert.match(landing, /href="\/pricing\.html"/);
+});
+
+test('pricing page includes Open Graph and Twitter Card metadata', async () => {
+  const pricing = await publicFile('pricing.html');
+  assert.match(pricing, /og:title/);
+  assert.match(pricing, /og:description/);
+  assert.match(pricing, /og:image/);
+  assert.match(pricing, /og:url/);
+  assert.match(pricing, /twitter:card/);
+  assert.match(pricing, /twitter:title/);
+  assert.match(pricing, /twitter:description/);
+});
+
+test('homepage pricing section has i18n translations for all languages', async () => {
+  const locale = await publicFile('locales/i18n.js');
+  for (const key of ['Simple plans. No surprise usage bill.', 'Start free', 'View full pricing →']) {
+    assert.match(locale, new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `i18n should contain key: ${key}`);
+  }
+});
+
 test('contact page directs routine billing to self-service and uses the clean public URL', async () => {
   const [contact, worker, server] = await Promise.all([
     publicFile('contact.html'),
