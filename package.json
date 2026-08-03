@@ -18,7 +18,10 @@
     "worker:types": "wrangler types",
     "worker:check": "tsc --noEmit",
     "worker:dev": "wrangler dev --local",
-    "worker:deploy:dry-run": "wrangler deploy --dry-run"
+    "worker:deploy:dry-run": "wrangler deploy --env='' --dry-run",
+    "worker:deploy:staging:dry-run": "wrangler deploy --env staging --dry-run",
+    "worker:deploy:staging": "wrangler deploy --env staging",
+    "worker:deploy:production": "wrangler deploy --env=''"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

@@ -34,5 +34,24 @@
   "vars": {
     "ENVIRONMENT": "production",
     "PUBLIC_ORIGIN": "https://pingstep.dev"
+  },
+  "env": {
+    "staging": {
+      "name": "pingstep-staging",
+      "workers_dev": true,
+      "routes": [],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "pingstep-staging",
+          "database_id": "2455eaf6-4662-4457-8fec-97eee4b48f28",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "vars": {
+        "ENVIRONMENT": "staging",
+        "PUBLIC_ORIGIN": "https://pingstep-staging.mantoshk234.workers.dev"
+      }
+    }
   }
 }

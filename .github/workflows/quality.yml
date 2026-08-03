@@ -26,3 +26,4 @@ jobs:
       - run: npm run test:e2e
       - run: npm run worker:check
       - run: npm run worker:deploy:dry-run
+      - run: npm run worker:deploy:staging:dry-run
