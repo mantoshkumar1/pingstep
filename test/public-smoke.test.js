@@ -77,6 +77,9 @@ test('pricing keeps the trial small and the paid plans, plan changes, and self-s
   assert.match(pricing, /US\$39/);
   assert.match(pricing, /app\?upgrade=pro/);
   assert.match(pricing, /app\?upgrade=team/);
+  assert.match(pricing, /data-plan="pro"/);
+  assert.match(pricing, /data-plan="team"/);
+  assert.match(pricing, /fetch\('\/v1\/billing\/checkout'/);
   assert.match(pricing, /automatically updates access after Stripe confirms/);
   assert.match(pricing, /Upgrades take effect immediately and Stripe charges the prorated difference/);
   assert.match(pricing, /unused paid value becomes a Stripe credit toward future invoices/);
