@@ -32,6 +32,7 @@ test('signed-in user can create a job without exposing workflow details', async 
   await expect(page.locator('#job-token')).toHaveText('ps_job_test');
   await expect(page.locator('#viewer-token')).toHaveText('ps_view_test');
   await expect(page.locator('#tokens')).toBeVisible();
+  await expect(page.locator('input[name="job_key"]')).toHaveValue('');
 });
 
 test('owner can rotate tokens and delete a job only after exact-key confirmation', async ({ page }) => {
