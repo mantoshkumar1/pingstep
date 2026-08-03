@@ -53,7 +53,10 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Deploy the tested build to the safe test site
-        run: npm run worker:deploy:staging
+        run: >-
+          npx wrangler deploy --env staging
+          --var RELEASE_VERSION:staging-$(git rev-parse --short HEAD)
+          --var RELEASE_SHA:$(git rev-parse --short HEAD)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
