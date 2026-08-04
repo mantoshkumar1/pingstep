@@ -64,6 +64,9 @@
           "migrations_dir": "migrations"
         }
       ],
+      "triggers": {
+        "crons": ["* * * * *"]
+      },
       "vars": {
         "ENVIRONMENT": "staging",
         "PUBLIC_ORIGIN": "https://pingstep-staging.mantoshk234.workers.dev",
