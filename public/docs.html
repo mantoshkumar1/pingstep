@@ -1,4 +1,262 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Docs — PingStep</title><meta name="description" content="Send clear job lifecycle updates to PingStep."><meta property="og:title" content="Docs — PingStep"><meta property="og:description" content="Send clear job lifecycle updates to PingStep."><meta property="og:url" content="https://pingstep.dev/docs.html"><meta property="og:type" content="website"><meta property="og:image" content="https://pingstep.dev/pingstep-mark.png"><meta name="twitter:card" content="summary"><meta name="twitter:title" content="Docs — PingStep"><meta name="twitter:description" content="Send clear job lifecycle updates to PingStep."><meta name="robots" content="index, follow"><link rel="canonical" href="https://pingstep.dev/docs.html"><link rel="icon" href="/pingstep-mark.svg" type="image/svg+xml"><link rel="stylesheet" href="/site.css"></head>
-<body><nav class="nav"><a class="brand" href="/"><img src="/pingstep-mark.svg" alt="">PingStep</a><span class="nav-right"><a href="/pricing.html">Pricing</a><a class="back" href="/app">Dashboard</a></span></nav><main><h1>Send your first job update</h1><p class="lead">PingStep receives small lifecycle events from your script. Keep raw output, logs, and job data in your own system.</p><div class="callout"><strong>Before you start:</strong> create a job in the dashboard and copy its one-time job token. Save it as a secret in the environment where the script runs.</div><h2>1. Set two environment variables</h2><pre>PINGSTEP_URL=https://pingstep.dev
-PINGSTEP_TOKEN=your-job-token</pre><h2>2. Send lifecycle events</h2><p>Send <code>started</code> at the beginning. Send <code>step</code> with a short stage name when useful, or <code>heartbeat</code> when the script is still connected but there is no new stage. Finish with exactly one explicit <code>succeeded</code> or <code>failed</code> event.</p><h2>3. Use status carefully</h2><ul><li><strong>Running</strong>: PingStep has received a recent update.</li><li><strong>Stale</strong>: updates stopped after the interval and grace time you chose. This does not prove the job failed.</li><li><strong>Succeeded / failed</strong>: your script explicitly reported the final result.</li></ul><h2>Event API</h2><p>POST JSON events to <code>https://pingstep.dev/v1/events</code> with <code>Authorization: Bearer YOUR_JOB_TOKEN</code>. Each event needs an ID, job key, run ID, increasing sequence number, event type, RFC 3339 timestamp, and optional data.</p></main><footer><a href="/status">Status</a><a href="/security.html">Security</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="/contact.html">Contact</a><label>Language <select id="language" aria-label="Language"><option value="en">English</option><option value="es">Español</option><option value="pt-BR">Português (Brasil)</option><option value="de">Deutsch</option></select></label></footer><script src="/locales/i18n.js"></script><script>PingStepI18n.init()</script></body></html>
+<body><nav class="nav"><a class="brand" href="/"><img src="/pingstep-mark.svg" alt="">PingStep</a><span class="nav-right"><a href="/pricing.html">Pricing</a><a class="back" href="/app">Dashboard</a></span></nav><main>
+
+<h1>Documentation</h1>
+<p class="lead">PingStep receives small lifecycle events from your script and shows the last known state of each run. Keep raw output, logs, and job data in your own system.</p>
+
+<div class="callout"><strong>Before you start:</strong> create a job in the <a href="/app">dashboard</a>, copy its job token, and save it as a secret in the environment where the script runs.</div>
+
+<h2>Quick start</h2>
+
+<p>Set two environment variables in your script's runtime:</p>
+
+<pre>export PINGSTEP_URL=https://pingstep.dev
+export PINGSTEP_TOKEN=ps_job_your-token-here</pre>
+
+<p>Then send lifecycle events over HTTPS. A minimal run looks like this:</p>
+
+<pre># 1. Start the run
+curl -X POST "$PINGSTEP_URL/v1/events" \
+  -H "Authorization: Bearer $PINGSTEP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_id": "evt-001",
+    "job_key": "nightly-backup",
+    "run_id": "run-2026-08-04",
+    "sequence": 1,
+    "type": "started",
+    "occurred_at": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
+  }'
+
+# 2. Report a stage
+curl -X POST "$PINGSTEP_URL/v1/events" \
+  -H "Authorization: Bearer $PINGSTEP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_id": "evt-002",
+    "job_key": "nightly-backup",
+    "run_id": "run-2026-08-04",
+    "sequence": 2,
+    "type": "step",
+    "occurred_at": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'",
+    "data": { "name": "uploading" }
+  }'
+
+# 3. Finish
+curl -X POST "$PINGSTEP_URL/v1/events" \
+  -H "Authorization: Bearer $PINGSTEP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_id": "evt-003",
+    "job_key": "nightly-backup",
+    "run_id": "run-2026-08-04",
+    "sequence": 3,
+    "type": "succeeded",
+    "occurred_at": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
+  }'</pre>
+
+<h2>Python example</h2>
+
+<p>No dependencies required — uses only the standard library.</p>
+
+<pre>import json, os, urllib.request
+
+URL = os.environ["PINGSTEP_URL"] + "/v1/events"
+TOKEN = os.environ["PINGSTEP_TOKEN"]
+
+def send(event_id, job_key, run_id, seq, event_type, data=None):
+    from datetime import datetime, timezone
+    payload = {
+        "event_id": event_id,
+        "job_key": job_key,
+        "run_id": run_id,
+        "sequence": seq,
+        "type": event_type,
+        "occurred_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if data:
+        payload["data"] = data
+    req = urllib.request.Request(
+        URL,
+        data=json.dumps(payload).encode(),
+        headers={
+            "Authorization": f"Bearer {TOKEN}",
+            "Content-Type": "application/json",
+        },
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read())
+
+# Usage
+send("evt-1", "nightly-backup", "run-42", 1, "started")
+send("evt-2", "nightly-backup", "run-42", 2, "step", {"name": "processing"})
+send("evt-3", "nightly-backup", "run-42", 3, "succeeded")</pre>
+
+<h2>Event API reference</h2>
+
+<p><code>POST https://pingstep.dev/v1/events</code></p>
+<p>Send a JSON body with <code>Authorization: Bearer YOUR_JOB_TOKEN</code> and <code>Content-Type: application/json</code>. Maximum body size is 64 KB.</p>
+
+<h2>Event fields</h2>
+
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>event_id</code></td><td>string</td><td>yes</td><td>Unique identifier for this event. Used for deduplication — sending the same <code>event_id</code> with identical content returns <code>200</code> instead of <code>202</code>. Reusing an <code>event_id</code> with different content returns <code>409</code>.</td></tr>
+<tr><td><code>job_key</code></td><td>string</td><td>yes</td><td>Must match the job key you created in the dashboard. The token must belong to this job.</td></tr>
+<tr><td><code>run_id</code></td><td>string</td><td>yes</td><td>An identifier you choose for this run. Use something unique per execution, like a timestamp or UUID. All events in one run share the same <code>run_id</code>.</td></tr>
+<tr><td><code>sequence</code></td><td>integer</td><td>yes</td><td>Must be a positive integer (≥ 1) and must increase with each event in a run. The <code>started</code> event must have <code>sequence: 1</code>.</td></tr>
+<tr><td><code>type</code></td><td>string</td><td>yes</td><td>One of: <code>started</code>, <code>step</code>, <code>heartbeat</code>, <code>succeeded</code>, <code>failed</code>, <code>cancelled</code>.</td></tr>
+<tr><td><code>occurred_at</code></td><td>string</td><td>yes</td><td>RFC 3339 timestamp of when the event happened in your system, e.g. <code>2026-08-04T14:30:00Z</code>.</td></tr>
+<tr><td><code>data</code></td><td>object</td><td>no</td><td>Optional metadata. Must be a JSON object if provided. Required for some event types (see below).</td></tr>
+</tbody>
+</table>
+
+<h2>Event types</h2>
+
+<table>
+<thead><tr><th>Type</th><th>When to send</th><th>Required data</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td><code>started</code></td><td>Beginning of the run</td><td>None</td><td>Creates the run. Must have <code>sequence: 1</code>. Sets status to <strong>Running</strong>.</td></tr>
+<tr><td><code>step</code></td><td>When entering a new stage</td><td><code>data.name</code> (string) — the stage name</td><td>Updates the current step shown on the dashboard. Resets the stale timer.</td></tr>
+<tr><td><code>heartbeat</code></td><td>When still alive but no new stage</td><td>None</td><td>Resets the stale timer without changing the displayed step.</td></tr>
+<tr><td><code>succeeded</code></td><td>Job completed successfully</td><td>None</td><td>Sets status to <strong>Succeeded</strong>. Terminal — no more events accepted.</td></tr>
+<tr><td><code>failed</code></td><td>Job failed</td><td><code>data.message</code> (string) — error description</td><td>Sets status to <strong>Failed</strong>. Terminal — no more events accepted.</td></tr>
+<tr><td><code>cancelled</code></td><td>Job was intentionally stopped</td><td>None</td><td>Sets status to <strong>Cancelled</strong>. Terminal — no more events accepted.</td></tr>
+</tbody>
+</table>
+
+<h2>HTTP status codes</h2>
+
+<table>
+<thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>202</code></td><td>Event accepted.</td></tr>
+<tr><td><code>200</code></td><td>Duplicate — this <code>event_id</code> was already processed with identical content.</td></tr>
+<tr><td><code>400</code></td><td>Validation error — missing or invalid fields. The response body contains <code>{"error": "..."}</code> with details.</td></tr>
+<tr><td><code>401</code></td><td>Invalid or missing job token.</td></tr>
+<tr><td><code>402</code></td><td>Plan limit exceeded — you have used all your runs for this 30-day window.</td></tr>
+<tr><td><code>409</code></td><td>Event ID conflict — this <code>event_id</code> was already used with different content.</td></tr>
+<tr><td><code>413</code></td><td>Request body exceeds 64 KB.</td></tr>
+</tbody>
+</table>
+
+<h2>Authentication</h2>
+
+<p>PingStep uses three types of tokens:</p>
+
+<p><strong>Job token</strong> (<code>ps_job_...</code>) — used to send events. Created when you create a job. Pass it as <code>Authorization: Bearer ps_job_...</code>. Each token is scoped to one job.</p>
+
+<p><strong>Viewer token</strong> (<code>ps_view_...</code>) — read-only access to view runs for one job. Share this with someone who needs to monitor a job but should not send events. Pass it as <code>Authorization: Bearer ps_view_...</code>.</p>
+
+<p><strong>Session cookie</strong> — set automatically when you sign in via GitHub or Google on the dashboard. Gives full access to your jobs and runs.</p>
+
+<p>PingStep stores only the SHA-256 hash of each token. If you lose a token, rotate it from the dashboard — the old token stops working immediately.</p>
+
+<h2>Read API</h2>
+
+<p>Use these endpoints to read run status programmatically. Authenticate with a viewer token, job token, or session cookie.</p>
+
+<p><code>GET https://pingstep.dev/v1/runs</code></p>
+<p>Returns all runs visible to the authenticated user or token.</p>
+<pre>{
+  "runs": [
+    {
+      "job_key": "nightly-backup",
+      "run_id": "run-2026-08-04",
+      "status": "running",
+      "current_step": "uploading",
+      "is_late": false,
+      "received_at": "2026-08-04T14:35:00Z",
+      "stale_transitions": 0,
+      "late_transitions": 0
+    }
+  ],
+  "role": "viewer"
+}</pre>
+
+<p><code>GET https://pingstep.dev/v1/runs/{job_key}/{run_id}</code></p>
+<p>Returns a single run. Returns <code>404</code> if the run does not exist.</p>
+
+<p><code>GET https://pingstep.dev/v1/runs/{job_key}/{run_id}/events</code></p>
+<p>Returns all events for a run, with parsed <code>data</code> objects.</p>
+<pre>{
+  "events": [
+    {
+      "event_id": "evt-001",
+      "job_key": "nightly-backup",
+      "run_id": "run-2026-08-04",
+      "type": "started",
+      "sequence": 1,
+      "occurred_at": "2026-08-04T14:30:00Z",
+      "data": {}
+    }
+  ]
+}</pre>
+
+<h2>Run statuses</h2>
+
+<p><strong>Running</strong> — PingStep has received a recent update. The dashboard shows the last reported step.</p>
+
+<p><strong>Stale</strong> — Updates stopped arriving after the interval and grace time you configured. This does not mean the job failed — it means PingStep cannot confirm the job is still active. A new <code>step</code> or <code>heartbeat</code> event recovers the run back to Running.</p>
+
+<p><strong>Late</strong> — The run has been active longer than expected. This is separate from stale: a run can be both on time (receiving updates) and late (running longer than the expected duration). Late is shown as an additional badge alongside the Running status.</p>
+
+<p><strong>Succeeded</strong> — Your script explicitly sent a <code>succeeded</code> event. PingStep never marks a run as succeeded on its own.</p>
+
+<p><strong>Failed</strong> — Your script explicitly sent a <code>failed</code> event. PingStep never marks a run as failed on its own.</p>
+
+<p><strong>Cancelled</strong> — Your script explicitly sent a <code>cancelled</code> event.</p>
+
+<h2>Stale detection</h2>
+
+<p>When you create a job, you set two values:</p>
+
+<p><strong>Expected update interval</strong> — how often your script normally sends an event (minimum 30 seconds on the free plan, 15 seconds on Pro/Team).</p>
+
+<p><strong>Liveness grace period</strong> — extra time before PingStep marks the run stale. Defaults to 120 seconds.</p>
+
+<p>The stale deadline is: <em>last liveness event time + interval + grace</em>. Events that reset the stale timer are <code>started</code>, <code>step</code>, and <code>heartbeat</code>. If no liveness event arrives before the deadline, the run becomes Stale. An alert is created, and if you have a webhook configured, PingStep notifies it.</p>
+
+<p>Example: with a 60-second interval and 120-second grace, the run goes stale after 3 minutes of silence.</p>
+
+<h2>Late detection</h2>
+
+<p>Late detection is optional. Set it when you know roughly how long a run should take:</p>
+
+<p><strong>Expected duration</strong> — how long the run normally takes from start to finish, in seconds.</p>
+
+<p><strong>Late grace</strong> — extra time before marking the run late. If not set, defaults to the larger of 300 seconds or 20% of the expected duration.</p>
+
+<p>The late deadline is: <em>start time + expected duration + late grace</em>. A run marked late is still Running — it just has an additional "late" badge. Terminal events (<code>succeeded</code>, <code>failed</code>, <code>cancelled</code>) clear the late flag.</p>
+
+<h2>Job configuration</h2>
+
+<p>Create jobs from the <a href="/app">dashboard</a> or programmatically via <code>POST /v1/jobs</code> (requires session cookie).</p>
+
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>job_key</code></td><td>string</td><td>—</td><td>2–101 characters. Letters, numbers, dots, dashes, underscores. Must start with a letter or number.</td></tr>
+<tr><td><code>expected_update_interval_seconds</code></td><td>integer</td><td>60</td><td>How often your script sends an event.</td></tr>
+<tr><td><code>liveness_grace_seconds</code></td><td>integer</td><td>120</td><td>Extra time before a run is marked stale.</td></tr>
+<tr><td><code>expected_duration_seconds</code></td><td>integer</td><td>—</td><td>Optional. Enables late detection.</td></tr>
+<tr><td><code>late_grace_seconds</code></td><td>integer</td><td>—</td><td>Optional. Extra time before marking late. Defaults to <code>max(300, ceil(expected_duration × 0.2))</code>.</td></tr>
+</tbody>
+</table>
+
+<h2>Plan limits</h2>
+
+<table>
+<thead><tr><th></th><th>Free trial</th><th>Pro ($12/mo)</th><th>Team ($39/mo)</th></tr></thead>
+<tbody>
+<tr><td>Jobs</td><td>2</td><td>10</td><td>50</td></tr>
+<tr><td>Runs per 30 days</td><td>10</td><td>2,000</td><td>10,000</td></tr>
+<tr><td>Min update interval</td><td>30s</td><td>15s</td><td>15s</td></tr>
+</tbody>
+</table>
+
+<p>Plan limits are enforced when creating jobs and when sending events. If you exceed your run limit, <code>POST /v1/events</code> returns <code>402</code>. <a href="/pricing.html">View full pricing</a>.</p>
+
+</main><footer><a href="/status">Status</a><a href="/security.html">Security</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="/contact.html">Contact</a><label>Language <select id="language" aria-label="Language"><option value="en">English</option><option value="es">Español</option><option value="pt-BR">Português (Brasil)</option><option value="de">Deutsch</option></select></label></footer><script src="/locales/i18n.js"></script><script>PingStepI18n.init()</script></body></html>
