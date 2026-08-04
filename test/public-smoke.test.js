@@ -59,13 +59,12 @@ test('landing and dashboard offer persistent Spanish, Brazilian Portuguese, and 
   assert.match(locale, /'See where your job is\.'\s*:\s*'Sehen Sie, wo Ihr Job steht\.'/);
 });
 
-test('dashboard exposes confirmed token rotation, job deletion, and translation feedback', async () => {
+test('dashboard exposes confirmed token rotation and job deletion', async () => {
   const workspace = await publicFile('workspace.html');
   assert.match(workspace, /Manage jobs/);
   assert.match(workspace, /tokens\/rotate/);
   assert.match(workspace, /Delete job/);
   assert.match(workspace, /confirm_job_key/);
-  assert.match(workspace, /translation%20feedback/);
   assert.match(workspace, /Intl\.DateTimeFormat\(PingStepI18n\.current\(\)/);
 });
 

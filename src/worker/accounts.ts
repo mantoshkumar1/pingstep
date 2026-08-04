@@ -134,6 +134,7 @@ async function accountForProfile(repository: PingStepD1Repository, provider: OAu
   if (!user) {
     user = { id: crypto.randomUUID(), email: profile.email, password_hash: 'external-identity-only', created_at: now } satisfies StoredUser;
     await repository.createUser(user);
+    await repository.setAccountPlan(user.id, 'trial', null, now);
   }
   await repository.createOAuthIdentity(provider, profile.subject, user.id, now);
   return { id: user.id, email: user.email };
