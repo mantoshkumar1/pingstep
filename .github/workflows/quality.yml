@@ -14,9 +14,25 @@ on:
 permissions:
   contents: read
 
+# =============================================================================
+# Required status checks for branch protection
+# =============================================================================
+# When configuring branch protection on `main`, mark these jobs as required:
+#
+#   1. "Lint, test, and build"    — unit tests, coverage, e2e, type check, deploy dry-run
+#
+# These jobs run only on push to main and should NOT be required status checks:
+#
+#   2. "Deploy staging"           — deploys to staging after verification passes on main
+#   3. "Staging: late-run e2e"    — long-running staging integration test
+#
+# The production release workflow (release-production.yml) is triggered manually
+# and re-verifies the tagged commit independently.
+# =============================================================================
+
 jobs:
   verify:
-    name: Test, coverage, and Worker build
+    name: Lint, test, and build
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -27,16 +43,23 @@ jobs:
           node-version: 26
           cache: npm
       - run: npm ci
-      - run: npm test
-      - run: npm run test:coverage
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
-      - run: npm run worker:check
-      - run: npm run worker:deploy:dry-run
-      - run: npm run worker:deploy:staging:dry-run
+      - name: Unit tests
+        run: npm test
+      - name: Coverage (worker core ≥ 90% lines/functions, ≥ 65% branches)
+        run: npm run test:coverage
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: End-to-end tests (local server)
+        run: npm run test:e2e
+      - name: TypeScript type check
+        run: npm run worker:check
+      - name: Worker build — production dry-run
+        run: npm run worker:deploy:dry-run
+      - name: Worker build — staging dry-run
+        run: npm run worker:deploy:staging:dry-run
 
   deploy-staging:
-    name: Deploy the safe test site
+    name: Deploy staging
     needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -69,7 +92,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
   e2e-late-run:
-    name: Verify late-run detection on staging
+    name: "Staging: late-run e2e"
     needs: deploy-staging
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -90,7 +113,7 @@ jobs:
           E2E_RUN_SUFFIX: gh-${{ github.run_id }}-${{ github.run_attempt }}
 
   e2e-late-run-manual:
-    name: Verify late-run detection on staging (manual)
+    name: "Staging: late-run e2e (manual)"
     if: github.event_name == 'workflow_dispatch' && inputs.run_staging_e2e
     runs-on: ubuntu-latest
     timeout-minutes: 6
