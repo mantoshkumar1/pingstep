@@ -14,15 +14,23 @@ Link the issue, incident, release note, advisory, or product need. A future revi
 
 ## Verification
 
-List the commands actually run and their result. For PingStep runtime changes, include the relevant subset of:
+Required GitHub Actions checks must pass before merge.
 
-```sh
-npm test
-npm run test:e2e
-npm run test:coverage
-npm run worker:check
-npm run worker:deploy:dry-run
-```
+### Additional manual or environment-specific verification
+
+- [ ] None — CI covers everything.
+- [ ] Performed — describe the scenario and result:
+
+<!--
+Only document manual verification here when:
+- behavior cannot be verified automatically (e.g. visual review, staging walkthrough)
+- staging or production validation was performed outside CI
+- exceptional testing was required beyond what CI runs
+
+CI already enforces: npm test, test:coverage, test:e2e, worker:check,
+worker:deploy:dry-run, and worker:deploy:staging:dry-run.
+Do not repeat these results here.
+-->
 
 ## Merge guidance
 
