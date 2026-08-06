@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Docs — PingStep</title><meta name="description" content="Send clear job lifecycle updates to PingStep."><meta property="og:title" content="Docs — PingStep"><meta property="og:description" content="Send clear job lifecycle updates to PingStep."><meta property="og:url" content="https://pingstep.dev/docs.html"><meta property="og:type" content="website"><meta property="og:image" content="https://pingstep.dev/pingstep-mark.png"><meta name="twitter:card" content="summary"><meta name="twitter:title" content="Docs — PingStep"><meta name="twitter:description" content="Send clear job lifecycle updates to PingStep."><meta name="robots" content="index, follow"><link rel="canonical" href="https://pingstep.dev/docs.html"><link rel="icon" href="/pingstep-mark.svg" type="image/svg+xml"><link rel="stylesheet" href="/site.css"></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Docs — PingStep</title><meta name="description" content="Progress-aware monitoring for unattended jobs. Send clear job lifecycle events to PingStep and read the API reference."><meta property="og:title" content="Docs — PingStep"><meta property="og:description" content="Progress-aware monitoring for unattended jobs. Send clear job lifecycle events to PingStep and read the API reference."><meta property="og:url" content="https://pingstep.dev/docs.html"><meta property="og:type" content="website"><meta property="og:image" content="https://pingstep.dev/pingstep-mark.png"><meta name="twitter:card" content="summary"><meta name="twitter:title" content="Docs — PingStep"><meta name="twitter:description" content="Progress-aware monitoring for unattended jobs. Send clear job lifecycle events to PingStep and read the API reference."><meta name="robots" content="index, follow"><link rel="canonical" href="https://pingstep.dev/docs.html"><link rel="icon" href="/pingstep-mark.svg" type="image/svg+xml"><link rel="stylesheet" href="/site.css"></head>
 <body><nav class="nav"><a class="brand" href="/"><img src="/pingstep-mark.svg" alt="">PingStep</a><span class="nav-right"><a href="/pricing.html">Pricing</a><a class="back" href="/app">Dashboard</a></span></nav><main>
 
 <h1>Documentation</h1>
-<p class="lead">PingStep receives small lifecycle events from your script and shows the last known state of each run. Keep raw output, logs, and job data in your own system.</p>
+<p class="lead">PingStep receives small lifecycle events from your script and shows the last reported stage of each run. Keep raw output, logs, and job data in your own system.</p>
 
 <div class="callout"><strong>Before you start:</strong> create a job in the <a href="/app">dashboard</a>, copy its job token, and save it as a secret in the environment where the script runs.</div>
 
@@ -119,8 +119,8 @@ send("evt-3", "nightly-backup", "run-42", 3, "succeeded")</pre>
 <thead><tr><th>Type</th><th>When to send</th><th>Required data</th><th>Effect</th></tr></thead>
 <tbody>
 <tr><td><code>started</code></td><td>Beginning of the run</td><td>None</td><td>Creates the run. Must have <code>sequence: 1</code>. Sets status to <strong>Running</strong>.</td></tr>
-<tr><td><code>step</code></td><td>When entering a new stage</td><td><code>data.name</code> (string) — the stage name</td><td>Updates the current step shown on the dashboard. Resets the stale timer.</td></tr>
-<tr><td><code>heartbeat</code></td><td>When still alive but no new stage</td><td>None</td><td>Resets the stale timer without changing the displayed step.</td></tr>
+<tr><td><code>step</code></td><td>When entering a new stage</td><td><code>data.name</code> (string) — the stage name</td><td>Updates the current stage shown on the dashboard. Resets the stale timer.</td></tr>
+<tr><td><code>heartbeat</code></td><td>When still alive but no new stage</td><td>None</td><td>Resets the stale timer without changing the displayed stage.</td></tr>
 <tr><td><code>succeeded</code></td><td>Job completed successfully</td><td>None</td><td>Sets status to <strong>Succeeded</strong>. Terminal — no more events accepted.</td></tr>
 <tr><td><code>failed</code></td><td>Job failed</td><td><code>data.message</code> (string) — error description</td><td>Sets status to <strong>Failed</strong>. Terminal — no more events accepted.</td></tr>
 <tr><td><code>cancelled</code></td><td>Job was intentionally stopped</td><td>None</td><td>Sets status to <strong>Cancelled</strong>. Terminal — no more events accepted.</td></tr>
@@ -197,7 +197,7 @@ send("evt-3", "nightly-backup", "run-42", 3, "succeeded")</pre>
 
 <h2>Run statuses</h2>
 
-<p><strong>Running</strong> — PingStep has received a recent update. The dashboard shows the last reported step.</p>
+<p><strong>Running</strong> — PingStep has received a recent update. The dashboard shows the last reported stage.</p>
 
 <p><strong>Stale</strong> — Updates stopped arriving after the interval and grace time you configured. This does not mean the job failed — it means PingStep cannot confirm the job is still active. A new <code>step</code> or <code>heartbeat</code> event recovers the run back to Running.</p>
 
@@ -217,7 +217,7 @@ send("evt-3", "nightly-backup", "run-42", 3, "succeeded")</pre>
 
 <p><strong>Liveness grace period</strong> — extra time before PingStep marks the run stale. Defaults to 120 seconds.</p>
 
-<p>The stale deadline is: <em>last liveness event time + interval + grace</em>. Events that reset the stale timer are <code>started</code>, <code>step</code>, and <code>heartbeat</code>. If no liveness event arrives before the deadline, the run becomes Stale. An alert is created, and if you have a webhook configured, PingStep notifies it.</p>
+<p>The stale deadline is: <em>last liveness event time + interval + grace</em>. Events that reset the stale timer are <code>started</code>, <code>step</code>, and <code>heartbeat</code>. If no liveness event arrives before the deadline, the run becomes Stale. An alert is created, and if the PingStep operator has configured an alert webhook, PingStep notifies it. Self-service webhook configuration is not yet available.</p>
 
 <p>Example: with a 60-second interval and 120-second grace, the run goes stale after 3 minutes of silence.</p>
 

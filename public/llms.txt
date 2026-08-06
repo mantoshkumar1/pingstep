@@ -1,6 +1,6 @@
 # PingStep
 
-> PingStep is progress-aware monitoring for long-running jobs. A job explicitly sends small lifecycle events; PingStep shows the latest reported stage and marks lost visibility as stale.
+> PingStep is progress-aware monitoring for unattended jobs. A job explicitly sends small lifecycle events; PingStep shows the last reported stage and marks lost visibility as stale.
 
 ## Public pages
 - Product: https://pingstep.dev/
@@ -16,7 +16,7 @@
 - Authentication: Authorization: Bearer JOB_TOKEN
 - Create a job and obtain its one-time job token through the authenticated dashboard.
 - Required event fields: event_id, job_key, run_id, sequence, type, occurred_at.
-- Event types: started, step, heartbeat, succeeded, failed.
+- Event types: started, step, heartbeat, succeeded, failed, cancelled.
 - started uses sequence 1. Each later logical event uses a higher sequence.
 - Retries must reuse the same event_id and identical body. New information needs a new event_id.
 - step requires data.name. failed requires data.message.
@@ -25,8 +25,10 @@
 ## Status semantics
 - running: a recent start, step, or heartbeat was received.
 - stale: updates stopped after the job's configured interval plus grace time. It is not proof of failure.
+- late: the run has exceeded its configured expected duration. Late is a separate, non-terminal condition that can appear alongside running or stale; it is not the same as stale.
 - succeeded: the job explicitly sent succeeded.
 - failed: the job explicitly sent failed. It is never automatically inferred from stale.
+- cancelled: the job explicitly sent cancelled. It is distinct from failed.
 
 ## Safe agent behavior
 - Ask the job owner for the job token through a secure secret store; never request it in chat or commit it.

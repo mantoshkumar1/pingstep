@@ -1,6 +1,6 @@
 # PingStep
 
-Progress-aware monitoring that shows the last stage a long-running job reached and makes lost visibility clear.
+Progress-aware monitoring for unattended jobs. PingStep shows the last reported stage a long-running job reached and makes lost visibility clear.
 
 Use the hosted dashboard at [pingstep.dev/app](https://pingstep.dev/app). Public guides are available at [Docs](https://pingstep.dev/docs.html), [Security](https://pingstep.dev/security.html), [Privacy](https://pingstep.dev/privacy.html), and [Status](https://pingstep.dev/status).
 

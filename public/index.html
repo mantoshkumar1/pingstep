@@ -4,6 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>PingStep — Runs</title>
+    <meta name="description" content="Progress-aware monitoring for unattended jobs. Operator view of run status, alerts, and job provisioning.">
+    <meta name="robots" content="noindex, nofollow">
     <link rel="icon" href="/pingstep-mark.svg" type="image/svg+xml">
     <style>
       :root { color-scheme: light; --ink:#18212f; --muted:#64748b; --line:#dbe3ee; --page:#f6f8fb; --card:#fff; --blue:#155eef; --red:#c4320a; --yellow:#b54708; --green:#067647; }
@@ -16,7 +18,7 @@
     </style>
   </head>
   <body>
-    <header><div class="brand"><img src="/pingstep-mark.svg" alt=""><div><h1>PingStep</h1><p>Progress-aware monitoring for unattended scripts</p></div></div><div><span id="updated" class="notice">Operator sign-in required</span><button id="sign-in">Sign in</button></div></header>
+    <header><div class="brand"><img src="/pingstep-mark.svg" alt=""><div><h1>PingStep</h1><p>Progress-aware monitoring for unattended jobs</p></div></div><div><span id="updated" class="notice">Operator sign-in required</span><button id="sign-in">Sign in</button></div></header>
     <main>
       <div class="summary" aria-label="Run summary"><div class="metric"><strong id="active-count">0</strong><span>Running</span></div><div class="metric"><strong id="stale-count">0</strong><span>Stale</span></div><div class="metric"><strong id="succeeded-count">0</strong><span>Succeeded</span></div><div class="metric"><strong id="failed-count">0</strong><span>Failed</span></div></div>
       <section id="operator-section"><div class="section-head"><h2>Operator controls</h2><span class="notice">Use synthetic jobs before launch.</span></div><div class="operator-grid"><div><form id="provision-job"><label>Job key<input name="job_key" required pattern="[A-Za-z0-9._-]{2,101}" value="synthetic-test"></label><label>Expected update interval (seconds)<input name="expected_update_interval_seconds" type="number" min="1" value="60"></label><label>Liveness grace (seconds)<input name="liveness_grace_seconds" type="number" min="0" value="120"></label><button type="submit">Create job token</button></form><div id="provision-result" class="notice"></div></div><div><h3>Recent alerts</h3><div id="alerts" class="notice">Sign in to view alerts.</div></div></div></section>
