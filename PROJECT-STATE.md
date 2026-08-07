@@ -73,7 +73,8 @@ Launch readiness is owned by [#132](https://github.com/mantoshkumar1/pingstep/is
 - **Active issue:** [#188 — Establish shared AI project state and a risk-based quality contract](https://github.com/mantoshkumar1/pingstep/issues/188)
   (body **plus all owner amendment comments** form the authoritative scope).
 - **Active branch:** `claude/188-shared-ai-project-state`, created from `main` at `2a0e5ab`.
-- **Active pull request:** opened for the branch above; see the issue's linked PR for current head SHA and CI.
+- **Active pull request:** [#189](https://github.com/mantoshkumar1/pingstep/pull/189) — open, awaiting strategy/review.
+  Check the PR itself for its current head SHA and CI result; those change and are not mirrored here.
 - **`main` at last verification:** `2a0e5ab` (squash merge of PR #187).
 
 ## 6. Current implementation owner
@@ -158,6 +159,9 @@ Full rules live in [`AGENTS.md`](./AGENTS.md#quality-contract). Non-negotiable s
 ## 10. Known risks and blockers
 
 - **No blockers for #188.** PR #187 is merged and #174 is closed, so the sequencing precondition is satisfied.
+  #188's remaining gate is ordinary review and merge of PR #189. Note that pushing a feature branch alone does
+  not run the quality gate — it triggers on pull requests and on `main` — so treat CI evidence as existing only
+  once a PR is open.
 - Production runs an older build than `main`; any production-behavior claim must be verified against a
   released tag, not `main`.
 - Playwright browser E2E cannot run in every sandbox (missing host browser libraries); CI is the authority for
@@ -181,8 +185,9 @@ Full rules live in [`AGENTS.md`](./AGENTS.md#quality-contract). Non-negotiable s
 
 ## 13. Exact next action
 
-Complete review of the open #188 governance pull request (strategy/review agent), then merge it before the
-next feature-level implementation wave begins.
+Review [PR #189](https://github.com/mantoshkumar1/pingstep/pull/189) (strategy/review agent) against issue
+#188's body **and all five amendment comments**, then merge it before the next feature-level implementation
+wave begins.
 
 ## 14. State-update rules
 
@@ -208,7 +213,9 @@ issue. Additional rules:
 ## 15. Last verified date, verifier, and source commit
 
 - **Last verified:** 2026-08-07
-- **Verified by:** Claude (implementation agent) for issue #188
+- **Verified by:** Claude (implementation agent) for issue #188 — this file is #188's own deliverable, which is
+  why an implementation agent authored it. Ongoing consolidation belongs to the strategy/review agent per
+  section 14; this signature is not a precedent for implementation agents self-consolidating state.
 - **Source commit:** `2a0e5ab` (`main` at branch creation)
 - **Verification basis:** live GitHub issue/PR/board/CI state, live staging and production `/health`, and the
   working tree at the commit above.
