@@ -12,6 +12,9 @@ import { completeOAuth, currentAccount, requireAccount, requireSameOrigin, signO
 import { policyFor, rollingWindowStart, type PlanCode } from './worker/plans.ts';
 import { createCheckout, createPortal, handleStripeWebhook } from './worker/billing.ts';
 import { submitFeedback } from './worker/feedback.ts';
+import { E2ERegistryRepository } from './worker/e2e-registry.ts';
+import { acknowledgeCleanup, completeRun, getRunStatus, isE2EControlEnabled, legacyInventory, registerResource, registerRun, requestCleanup, requireE2EControl, resetCleanup } from './worker/e2e-control.ts';
+import { runE2EJanitor } from './worker/e2e-janitor.ts';
 
 const json = (body: unknown, status = 200, headers: HeadersInit = {}) => Response.json(body, {
   status,
@@ -245,6 +248,57 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     const clientIp = request.headers.get('cf-connecting-ip');
     return json(await submitFeedback(env.DB, env, await readJsonBody(request, MAX_CONTROL_BODY_BYTES), clientIp));
   }
+  // ── Internal staging-only E2E control surface (issue #174) ──
+  // Every branch below is guarded by isE2EControlEnabled(env) so that when the
+  // facility is disabled (always true in production) execution falls through
+  // unchanged to the generic 404 below — production never reveals this exists.
+  if (isE2EControlEnabled(env)) {
+    if (request.method === 'POST' && url.pathname === '/v1/internal/e2e/runs') {
+      await requireE2EControl(request, env);
+      return json(await registerRun(new E2ERegistryRepository(env.DB), await readJsonBody(request, MAX_CONTROL_BODY_BYTES), new Date()), 201);
+    }
+    const e2eRunMatch = url.pathname.match(/^\/v1\/internal\/e2e\/runs\/([0-9a-f-]{8,36})$/i);
+    if (request.method === 'GET' && e2eRunMatch) {
+      await requireE2EControl(request, env);
+      return json(await getRunStatus(new E2ERegistryRepository(env.DB), e2eRunMatch[1]));
+    }
+    const e2eResourcesMatch = url.pathname.match(/^\/v1\/internal\/e2e\/runs\/([0-9a-f-]{8,36})\/resources$/i);
+    if (request.method === 'POST' && e2eResourcesMatch) {
+      await requireE2EControl(request, env);
+      return json(await registerResource(new E2ERegistryRepository(env.DB), e2eResourcesMatch[1], await readJsonBody(request, MAX_CONTROL_BODY_BYTES), new Date()), 201);
+    }
+    const e2eCompleteMatch = url.pathname.match(/^\/v1\/internal\/e2e\/runs\/([0-9a-f-]{8,36})\/complete$/i);
+    if (request.method === 'POST' && e2eCompleteMatch) {
+      await requireE2EControl(request, env);
+      return json(await completeRun(new E2ERegistryRepository(env.DB), e2eCompleteMatch[1], await readJsonBody(request, MAX_CONTROL_BODY_BYTES), new Date()));
+    }
+    const e2eCleanupMatch = url.pathname.match(/^\/v1\/internal\/e2e\/runs\/([0-9a-f-]{8,36})\/cleanup$/i);
+    if (request.method === 'POST' && e2eCleanupMatch) {
+      await requireE2EControl(request, env);
+      return json(await requestCleanup(new E2ERegistryRepository(env.DB), e2eCleanupMatch[1], new Date()));
+    }
+    const e2eAcknowledgeMatch = url.pathname.match(/^\/v1\/internal\/e2e\/runs\/([0-9a-f-]{8,36})\/acknowledge$/i);
+    if (request.method === 'POST' && e2eAcknowledgeMatch) {
+      await requireE2EControl(request, env);
+      const body = await readJsonBody(request, MAX_CONTROL_BODY_BYTES) as { confirm?: unknown };
+      return json(await acknowledgeCleanup(new E2ERegistryRepository(env.DB), e2eAcknowledgeMatch[1], new Date(), body.confirm === true));
+    }
+    const e2eResetMatch = url.pathname.match(/^\/v1\/internal\/e2e\/runs\/([0-9a-f-]{8,36})\/reset$/i);
+    if (request.method === 'POST' && e2eResetMatch) {
+      await requireE2EControl(request, env);
+      return json(await resetCleanup(new E2ERegistryRepository(env.DB), e2eResetMatch[1]));
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/internal/e2e/janitor/run') {
+      await requireE2EControl(request, env);
+      const body = await readJsonBody(request, MAX_CONTROL_BODY_BYTES) as { dry_run?: unknown; confirm?: unknown };
+      const dryRun = !(body.dry_run === false && body.confirm === true);
+      return json(await runE2EJanitor(new E2ERegistryRepository(env.DB), env, new Date(), dryRun));
+    }
+    if (request.method === 'GET' && url.pathname === '/v1/internal/e2e/legacy-inventory') {
+      await requireE2EControl(request, env);
+      return json({ jobs: await legacyInventory(new E2ERegistryRepository(env.DB)) });
+    }
+  }
   if (url.pathname.startsWith('/v1/')) {
     return json({ error: 'API endpoint not found.' }, 404);
   }
@@ -272,5 +326,12 @@ export default {
     const reconciled = await new HostedPingStepService(repository).reconcile();
     const delivered = await deliverPendingAlerts(repository, env);
     console.log(JSON.stringify({ event: 'scheduled_reconcile', stale_runs_marked: reconciled.stale, late_runs_marked: reconciled.late, alerts_delivered: delivered, expired_pending_events: expiredPendingEvents, expired_oauth_states: expiredOAuthStates, expired_sessions: expiredSessions }));
+
+    // Staging-only, feature-flagged orphan janitor for expired E2E test runs (issue #174).
+    // Never runs in production: isE2EControlEnabled() requires ENVIRONMENT === 'staging'.
+    if (isE2EControlEnabled(env)) {
+      const janitor = await runE2EJanitor(new E2ERegistryRepository(env.DB), env, new Date(), false);
+      console.log(JSON.stringify({ event: 'e2e_janitor', ...janitor }));
+    }
   }
 } satisfies ExportedHandler<Env>;
