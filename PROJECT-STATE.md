@@ -126,11 +126,12 @@ explicitly transferred by the founder.
 ### Review findings and defects
 
 - **[PR #189](https://github.com/mantoshkumar1/pingstep/pull/189) (#188 governance) — under review.**
-  Review `4886799234` raised four findings; all four are addressed on the branch. The mandatory fresh-session
-  review exercise was then re-run against the final head and found two further defects, now also fixed: an
-  over-broad Git-SHA exemption in the secret detector (substrings such as `header`/`review` could exempt a real
-  40-char hex secret) and stale merge-authority wording in the PR body and issue closeout. Awaiting
-  strategy/review re-review; the founder then decides on merge.
+  Review rounds on that PR have raised findings in the governance files and tests; each has been addressed on
+  the branch, including an over-broad Git-SHA exemption in the secret detector and wording that delegated
+  merge authority to the reviewer. The PR and issue #188 hold the authoritative, per-head record of review
+  findings, fresh-session acceptance evidence, and current status — consult them rather than this summary for
+  which head was exercised and what remains open. Awaiting strategy/review; the founder then decides whether
+  to approve the merge.
 - The six review rounds on PR #187 are all resolved and were verified against the merged code, not against
   agent summaries.
 
