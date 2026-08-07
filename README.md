@@ -1,5 +1,43 @@
 # PingStep
 
+## AI project continuation
+
+**Humans and AI agents must read [`PROJECT-STATE.md`](PROJECT-STATE.md) before analyzing, planning,
+implementing, reviewing, or changing this repository.** It contains the authoritative current state, active
+work, quality requirements, blockers, and the exact next action. Cross-agent operating rules are in
+[`AGENTS.md`](AGENTS.md); tool-specific pointers such as [`CLAUDE.md`](CLAUDE.md) are thin and add nothing
+mutable.
+
+**Authority:** Mantosh is the sole product and priority decision authority. Strategy/review agents (e.g.
+ChatGPT) may record founder-approved decisions and review findings, but may not promote their own
+recommendations to settled decisions. Claude/Codex are implementation agents: they implement the assigned
+issue slice and must not make product decisions or rewrite project policy. Live GitHub state always outranks
+the repository snapshot.
+
+### Start any new AI session
+
+```text
+Continue PingStep from https://github.com/mantoshkumar1/pingstep. Read the repository instructions and current GitHub state before acting.
+```
+
+### Close a strategy/review session (ChatGPT)
+
+Use this when the session analyzed options, defined tasks, or reviewed issues and pull requests.
+
+```text
+Close out this PingStep strategy and review session. Inspect the current GitHub state, record only decisions I explicitly approved, factual project state, review findings, blockers, manual actions, and one exact next action. Clearly label unapproved recommendations as awaiting founder decision. Update PROJECT-STATE.md only when material state changed. Do not start new work.
+```
+
+### Close an implementation session (Claude / Codex)
+
+Use this when the session wrote code, tests, or infrastructure. It deliberately withholds decision authority.
+
+```text
+Close out this PingStep implementation session. Do not make or reinterpret product decisions. Record the branch, commits, changed files, tests and CI/staging evidence, deviations, known defects, blockers, manual actions, and exact next action in the issue or PR. Update PROJECT-STATE.md only when material factual state changed. Mark unresolved product questions for founder and strategy review. Do not start another task.
+```
+
+---
+
 Progress-aware monitoring that shows the last stage a long-running job reached and makes lost visibility clear.
 
 Use the hosted dashboard at [pingstep.dev/app](https://pingstep.dev/app). Public guides are available at [Docs](https://pingstep.dev/docs.html), [Security](https://pingstep.dev/security.html), [Privacy](https://pingstep.dev/privacy.html), and [Status](https://pingstep.dev/status).
