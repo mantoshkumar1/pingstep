@@ -61,7 +61,7 @@ release workflow. Launch readiness remains owned by [#132](https://github.com/ma
 - **Active issue:** [#190 — Require completed PRs to auto-close their authoritative issue](https://github.com/mantoshkumar1/pingstep/issues/190).
 - **Active pull request:** [#191](https://github.com/mantoshkumar1/pingstep/pull/191).
 - **Active branch:** `chatgpt/issue-auto-close-on-merge`.
-- **`main` at branch creation:** commit `4cc6f727953a416e09b85d56688aa750a397df3d` (merge of PR #189 / #188 governance).
+- **`main` at branch creation:** commit `4cc6f72` (merge of PR #189 / #188 governance).
 
 Check PR #191 for its current head SHA and CI result rather than copying those mutable values here.
 
@@ -75,8 +75,8 @@ ChatGPT strategy/review owns this narrow governance branch under the state-write
 
 - **[#188](https://github.com/mantoshkumar1/pingstep/issues/188) — shared AI project state and risk-based quality contract: completed.**
   Delivered by [PR #189](https://github.com/mantoshkumar1/pingstep/pull/189), merged to `main` as commit
-  `4cc6f727953a416e09b85d56688aa750a397df3d`. The issue was manually closed because PR #189 lacked a GitHub
-  closing keyword; #190 exists to prevent that manual close step for future completed tasks.
+  `4cc6f72`. The issue was manually closed because PR #189 lacked a GitHub closing keyword; #190 exists to
+  prevent that manual close step for future completed tasks.
 - **[#174](https://github.com/mantoshkumar1/pingstep/issues/174) — staging E2E isolation and cleanup: completed.**
 - **[#158](https://github.com/mantoshkumar1/pingstep/issues/158) — GitHub Actions verification gate: completed.**
 
@@ -98,7 +98,7 @@ ChatGPT strategy/review owns this narrow governance branch under the state-write
 
 ### Current factual implementation state
 
-- `main` at branch creation = commit `4cc6f727953a416e09b85d56688aa750a397df3d`.
+- `main` at branch creation = commit `4cc6f72`.
 - Latest migration remains `migrations/0009_e2e_registry.sql`; #190 adds no migration.
 - PR #191 changes governance/process only: PR template, cross-agent instructions, state snapshot, and
   deterministic governance tests. It does not change product runtime behavior.
