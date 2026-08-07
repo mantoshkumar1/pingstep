@@ -2,6 +2,9 @@
 
 - **Authoritative issue:** #
 - **Implementation slice:** what this PR actually delivers, in plain language.
+- **Issue closure:** replace this placeholder with exactly one of the following before review:
+  - `Closes #<issue>` — use this only when this PR fully completes the authoritative issue; merging to `main` must auto-close it.
+  - `Refs #<issue> — partial; issue remains open` — use this when the PR is only a slice of a larger issue. Do **not** use a closing keyword for partial work.
 - **Amendments covered:** confirm this PR maps evidence against the issue body **and every amendment comment**
   on that issue, not the original body alone. List the amendments considered, or `None — issue has no amendments`.
 - **Explicitly out of scope:** what a reviewer should *not* expect here, and which issue owns it.
