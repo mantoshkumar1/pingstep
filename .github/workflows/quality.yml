@@ -110,7 +110,29 @@ jobs:
         env:
           PINGSTEP_STAGING_BASE_URL: https://pingstep-staging.mantoshk234.workers.dev
           PINGSTEP_STAGING_OPERATOR_TOKEN: ${{ secrets.PINGSTEP_STAGING_OPERATOR_TOKEN }}
+          PINGSTEP_STAGING_E2E_CONTROL_TOKEN: ${{ secrets.PINGSTEP_STAGING_E2E_CONTROL_TOKEN }}
           E2E_RUN_SUFFIX: gh-${{ github.run_id }}-${{ github.run_attempt }}
+          E2E_SOURCE: github_push
+          E2E_RUN_ID_OUT_FILE: /tmp/e2e-run-id.txt
+      # Second line of defense: the script above already attempts its own
+      # in-process cleanup from a `finally` path. If the job is
+      # hard-cancelled or killed before that runs, this step still fires. It
+      # reads the run id the script wrote out as soon as it registered (a
+      # cryptographically random UUID — never derived from branch/actor/
+      # token), so it targets the exact same E2E test run. The bounded
+      # staging orphan janitor is the third line of defense for anything
+      # even a hard runner kill keeps this step from reaching.
+      - name: Clean up E2E resources
+        if: always()
+        run: |
+          if [ -f /tmp/e2e-run-id.txt ]; then
+            node scripts/e2e-staging-cleanup.mjs --run-id "$(cat /tmp/e2e-run-id.txt)"
+          else
+            echo "No E2E run id was registered (failed before registration); nothing to clean up here. The orphan janitor covers any residual state."
+          fi
+        env:
+          PINGSTEP_STAGING_BASE_URL: https://pingstep-staging.mantoshk234.workers.dev
+          PINGSTEP_STAGING_E2E_CONTROL_TOKEN: ${{ secrets.PINGSTEP_STAGING_E2E_CONTROL_TOKEN }}
 
   e2e-late-run-manual:
     name: "Staging: late-run e2e (manual)"
@@ -130,4 +152,18 @@ jobs:
         env:
           PINGSTEP_STAGING_BASE_URL: https://pingstep-staging.mantoshk234.workers.dev
           PINGSTEP_STAGING_OPERATOR_TOKEN: ${{ secrets.PINGSTEP_STAGING_OPERATOR_TOKEN }}
+          PINGSTEP_STAGING_E2E_CONTROL_TOKEN: ${{ secrets.PINGSTEP_STAGING_E2E_CONTROL_TOKEN }}
           E2E_RUN_SUFFIX: manual-${{ github.run_id }}-${{ github.run_attempt }}
+          E2E_SOURCE: workflow_dispatch
+          E2E_RUN_ID_OUT_FILE: /tmp/e2e-run-id.txt
+      - name: Clean up E2E resources
+        if: always()
+        run: |
+          if [ -f /tmp/e2e-run-id.txt ]; then
+            node scripts/e2e-staging-cleanup.mjs --run-id "$(cat /tmp/e2e-run-id.txt)"
+          else
+            echo "No E2E run id was registered (failed before registration); nothing to clean up here. The orphan janitor covers any residual state."
+          fi
+        env:
+          PINGSTEP_STAGING_BASE_URL: https://pingstep-staging.mantoshk234.workers.dev
+          PINGSTEP_STAGING_E2E_CONTROL_TOKEN: ${{ secrets.PINGSTEP_STAGING_E2E_CONTROL_TOKEN }}

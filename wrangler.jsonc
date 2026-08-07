@@ -70,7 +70,12 @@
       "vars": {
         "ENVIRONMENT": "staging",
         "PUBLIC_ORIGIN": "https://pingstep-staging.mantoshk234.workers.dev",
-        "FEEDBACK_NOTIFY_EMAIL": "mantoshk234@gmail.com"
+        "FEEDBACK_NOTIFY_EMAIL": "mantoshk234@gmail.com",
+        // Enables the internal /v1/internal/e2e/* control surface (issue #174).
+        // The E2E_CONTROL_TOKEN secret must also be set via `wrangler secret put`
+        // for staging — without it isE2EControlEnabled() stays false. Never set
+        // either of these on the production environment.
+        "E2E_CONTROL_ENABLED": "true"
       },
       "send_email": [
         {
