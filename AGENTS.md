@@ -133,6 +133,16 @@ authoritative routine gate; state any check that could not run and why.
 - After a merged change that affects runtime behavior, confirm the staging deployment and perform the relevant
   staging check before considering it complete.
 
+## Issue closure on merge
+
+- When one PR fully completes its authoritative issue, the PR body must contain `Closes #<issue>` (with the
+  real issue number). GitHub should close that issue automatically when the PR merges to `main`.
+- When a PR is only a partial slice, use `Refs #<issue>` or another non-closing reference and state that the
+  issue remains open. Never use a closing keyword for partial work.
+- Do not close a completion issue early merely because implementation or review finished. Merge is the normal
+  closure event. After merge, verify that GitHub closed the issue automatically; if it did not, treat the
+  missing/incorrect closing reference as a process defect rather than normalizing a manual close step.
+
 ## End of work
 
 1. Commit and push authorized work, or explicitly report why it remains local and unverifiable.
