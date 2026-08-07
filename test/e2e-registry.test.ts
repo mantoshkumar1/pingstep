@@ -78,6 +78,17 @@ class MemoryE2ERegistryRepository {
     this.runs.set(id, { ...run, cleanup_status: 'pending', cleanup_started_at: null });
     return true;
   }
+  async rearmRetryableResources(runId: string) {
+    let rearmed = 0;
+    for (const [key, resource] of this.resources) {
+      if (resource.run_id === runId && resource.lifecycle === 'cleanup_failed'
+        && (resource.cleanup_failure_code === 'rows_remaining' || resource.cleanup_failure_code === 'exception')) {
+        this.resources.set(key, { ...resource, cleanup_attempts: 0 });
+        rearmed += 1;
+      }
+    }
+    return rearmed;
+  }
   async requestCleanup(id: string) {
     const run = this.runs.get(id);
     if (!run || run.cleanup_status !== 'not_started') return false;
@@ -434,7 +445,7 @@ test('a fresh in_progress lease cannot be stolen by a concurrent caller', async 
   assert.equal(result.cleanup_status, 'in_progress');
 });
 
-test('operator reset: requires_operator run can be reset and retried via resetCleanup', async () => {
+test('operator reset genuinely re-arms a safely retryable failure and the retry then succeeds', async () => {
   const repository = repo() as unknown as MemoryE2ERegistryRepository;
   const { run } = await registerRun(repository as unknown as E2ERegistryRepository, { suite: 'late-run', source: 'local_manual' }, now);
   repository.jobs.set('e2e-late-retry', { owner_user_id: null, created_at: now.toISOString() });
@@ -451,18 +462,19 @@ test('operator reset: requires_operator run can be reset and retried via resetCl
   const blocked = await performCleanup(repository as unknown as E2ERegistryRepository, run.id, now);
   assert.equal(blocked.cleanup_status, 'requires_operator');
 
-  // Operator fixes the issue and explicitly resets for retry — but resource is at max attempts,
-  // so we need to verify it still stays requires_operator. The reset clears the run status but
-  // doesn't reset resource attempts.
+  // Operator fixes the underlying issue and explicitly resets with confirmation.
+  // The reset re-arms the retryable resource (attempts back to 0) for one new
+  // bounded window, so the retry can actually run — and now succeeds.
   repository.forceRowsRemainAfterCleanup.delete('e2e-late-retry');
-  await resetCleanup(repository as unknown as E2ERegistryRepository, run.id);
-  const runAfterReset = await repository.getRun(run.id);
-  assert.equal(runAfterReset?.cleanup_status, 'pending');
+  const reset = await resetCleanup(repository as unknown as E2ERegistryRepository, run.id, true);
+  assert.equal(reset.cleanup_status, 'pending');
+  assert.equal(reset.rearmed_resources, 1);
+  const rearmedResource = await repository.getResource(run.id, 'job', 'e2e-late-retry');
+  assert.equal(rearmedResource?.cleanup_attempts, 0, 'reset must re-arm the retryable resource with a fresh attempt window');
 
-  // Resource is at max attempts, so even with the fix it stays requires_operator.
-  // This is correct — reset is for operator re-evaluation, not infinite retry.
   const afterReset = await performCleanup(repository as unknown as E2ERegistryRepository, run.id, now);
-  assert.equal(afterReset.cleanup_status, 'requires_operator');
+  assert.equal(afterReset.cleanup_status, 'completed', 'after an explicit re-arm and a fixed underlying issue the retry must succeed');
+  assert.equal(repository.jobs.has('e2e-late-retry'), false);
 });
 
 test('operator acknowledge: requires_operator run can be acknowledged as terminal', async () => {
@@ -488,7 +500,7 @@ test('acknowledge/reset reject non-requires_operator runs', async () => {
   const repository = repo();
   const { run } = await registerRun(repository, { suite: 'late-run', source: 'local_manual' }, now);
   await assert.rejects(() => acknowledgeCleanup(repository, run.id, now, true), (e: HttpError) => e.status === 409);
-  await assert.rejects(() => resetCleanup(repository, run.id), (e: HttpError) => e.status === 409);
+  await assert.rejects(() => resetCleanup(repository, run.id, true), (e: HttpError) => e.status === 409);
 });
 
 test('exhausted cleanup attempts reach requires_operator and stay there — not auto-retried', async () => {
@@ -510,11 +522,11 @@ test('exhausted cleanup attempts reach requires_operator and stay there — not 
   assert.equal(resource?.cleanup_attempts, 3);
   assert.equal((await repository.getRun(run.id))?.cleanup_status, 'requires_operator');
 
-  // Even with a reset, the resource is at max attempts — stays requires_operator.
-  await resetCleanup(repository as unknown as E2ERegistryRepository, run.id);
-  repository.forceRowsRemainAfterCleanup.delete('e2e-late-exhaust');
+  // Without explicit operator action the run stays requires_operator:
+  // replaying cleanup returns the cached terminal state, never a retry.
   const final = await performCleanup(repository as unknown as E2ERegistryRepository, run.id, now);
   assert.equal(final.cleanup_status, 'requires_operator');
+  assert.equal((await repository.getResource(run.id, 'job', 'e2e-late-exhaust'))?.cleanup_attempts, 3);
 });
 
 test('ownership_mismatch resources are permanently skipped — never silently retried', async () => {
@@ -529,8 +541,14 @@ test('ownership_mismatch resources are permanently skipped — never silently re
   const resource = await repository.getResource(run.id, 'job', 'e2e-late-owned2');
   assert.equal(resource?.cleanup_failure_code, 'ownership_mismatch');
 
-  // Even after a reset, ownership_mismatch is permanent.
-  await resetCleanup(repository as unknown as E2ERegistryRepository, run.id);
+  // Reset is refused outright: ownership_mismatch is permanent and there is
+  // no safely retryable resource for a reset to re-arm.
+  await assert.rejects(
+    () => resetCleanup(repository as unknown as E2ERegistryRepository, run.id, true),
+    (e: HttpError) => e.status === 409 && /no safely retryable/.test(e.message)
+  );
+
+  // The run stays requires_operator and the mismatched job is never touched.
   repository.jobs.set('e2e-late-owned2', { owner_user_id: null, created_at: now.toISOString() });
   const retry = await performCleanup(repository as unknown as E2ERegistryRepository, run.id, now);
   assert.equal(retry.cleanup_status, 'requires_operator');
@@ -1019,10 +1037,89 @@ test('resetCleanup returns 409 with the actual state when the CAS loses a race',
     return originalReset(id); // our CAS now matches zero rows → false
   };
   await assert.rejects(
-    () => resetCleanup(repoAs, run.id),
+    () => resetCleanup(repoAs, run.id, true),
     (error: HttpError) => error.status === 409 && error.message.includes('operator_acknowledged'),
     "a lost race must surface as 409 reporting the actual state, never a claimed 'pending'"
   );
   const after = await repository.getRun(run.id);
   assert.equal(after?.cleanup_status, 'operator_acknowledged');
+});
+
+// ── Fifth review: reset must be an honest, bounded, ownership-mismatch-safe recovery path ──
+
+test('resetCleanup requires explicit confirmation', async () => {
+  const repository = repo() as unknown as MemoryE2ERegistryRepository;
+  const repoAs = repository as unknown as E2ERegistryRepository;
+  const run = await runAtRequiresOperator(repository, 'e2e-late-reset-noconfirm');
+  await assert.rejects(() => resetCleanup(repoAs, run.id, false), (e: HttpError) => e.status === 400 && /confirmation/.test(e.message));
+  // Nothing changed: still requires_operator, attempts untouched.
+  assert.equal((await repository.getRun(run.id))?.cleanup_status, 'requires_operator');
+  assert.equal((await repository.getResource(run.id, 'job', 'e2e-late-reset-noconfirm'))?.cleanup_attempts, 3);
+});
+
+test('reset re-arms only safely retryable resources in a mixed run — ownership_mismatch is never re-armed', async () => {
+  const repository = repo() as unknown as MemoryE2ERegistryRepository;
+  const repoAs = repository as unknown as E2ERegistryRepository;
+  const { run } = await registerRun(repoAs, { suite: 'late-run', source: 'local_manual' }, now);
+
+  // Retryable resource: rows keep remaining (transient).
+  repository.jobs.set('e2e-late-mixed-retry', { owner_user_id: null, created_at: now.toISOString() });
+  repository.forceRowsRemainAfterCleanup.add('e2e-late-mixed-retry');
+  await registerResource(repoAs, run.id, { resource_type: 'job', resource_ref: 'e2e-late-mixed-retry', lifecycle: 'created' }, now);
+
+  // Permanent resource: job acquires a real owner after registration → ownership_mismatch.
+  repository.jobs.set('e2e-late-mixed-owned', { owner_user_id: null, created_at: now.toISOString() });
+  await registerResource(repoAs, run.id, { resource_type: 'job', resource_ref: 'e2e-late-mixed-owned', lifecycle: 'created' }, now);
+  repository.jobs.set('e2e-late-mixed-owned', { owner_user_id: 'user-99', created_at: now.toISOString() });
+
+  // First cleanup: permanent mismatch present → requires_operator immediately.
+  const first = await performCleanup(repoAs, run.id, now);
+  assert.equal(first.cleanup_status, 'requires_operator');
+  assert.equal((await repository.getResource(run.id, 'job', 'e2e-late-mixed-owned'))?.cleanup_failure_code, 'ownership_mismatch');
+  const retryableBefore = await repository.getResource(run.id, 'job', 'e2e-late-mixed-retry');
+  assert.equal(retryableBefore?.cleanup_failure_code, 'rows_remaining');
+
+  // Operator fixes the transient issue and resets: only the retryable
+  // resource is re-armed; the mismatch keeps its attempts and failure code.
+  repository.forceRowsRemainAfterCleanup.delete('e2e-late-mixed-retry');
+  const mismatchAttemptsBefore = (await repository.getResource(run.id, 'job', 'e2e-late-mixed-owned'))?.cleanup_attempts;
+  const reset = await resetCleanup(repoAs, run.id, true);
+  assert.equal(reset.rearmed_resources, 1, 'only the safely retryable resource may be re-armed');
+  assert.equal((await repository.getResource(run.id, 'job', 'e2e-late-mixed-retry'))?.cleanup_attempts, 0);
+  const mismatchAfterReset = await repository.getResource(run.id, 'job', 'e2e-late-mixed-owned');
+  assert.equal(mismatchAfterReset?.cleanup_attempts, mismatchAttemptsBefore, 'ownership_mismatch attempts must be untouched by reset');
+  assert.equal(mismatchAfterReset?.cleanup_failure_code, 'ownership_mismatch');
+
+  // The retry cleans the retryable resource, but the permanent mismatch
+  // honestly returns the run to requires_operator — and never deletes the
+  // customer-owned job.
+  const retry = await performCleanup(repoAs, run.id, now);
+  assert.equal(retry.cleanup_status, 'requires_operator');
+  assert.equal(repository.jobs.has('e2e-late-mixed-retry'), false, 'the re-armed retryable resource is actually cleaned');
+  assert.equal(repository.jobs.has('e2e-late-mixed-owned'), true, 'the mismatched job is never deleted');
+  assert.equal((await repository.getResource(run.id, 'job', 'e2e-late-mixed-retry'))?.lifecycle, 'cleaned');
+});
+
+test('a reset re-armed window stays bounded: exhaustion returns to requires_operator, not infinite retry', async () => {
+  const repository = repo() as unknown as MemoryE2ERegistryRepository;
+  const repoAs = repository as unknown as E2ERegistryRepository;
+  const stagingEnv = { ENVIRONMENT: 'staging', E2E_CONTROL_ENABLED: 'true', E2E_CONTROL_TOKEN: 'secret' } as unknown as Env;
+  const run = await runAtRequiresOperator(repository, 'e2e-late-rewindow');
+
+  // Operator resets, but the underlying issue is NOT fixed.
+  const reset = await resetCleanup(repoAs, run.id, true);
+  assert.equal(reset.rearmed_resources, 1);
+
+  // The new window is again capped at MAX_CLEANUP_ATTEMPTS (3): two
+  // retryable failures stay pending, the third exhausts back to
+  // requires_operator.
+  assert.equal((await performCleanup(repoAs, run.id, now)).cleanup_status, 'pending');
+  assert.equal((await performCleanup(repoAs, run.id, now)).cleanup_status, 'pending');
+  assert.equal((await performCleanup(repoAs, run.id, now)).cleanup_status, 'requires_operator');
+  assert.equal((await repository.getResource(run.id, 'job', 'e2e-late-rewindow'))?.cleanup_attempts, 3);
+
+  // Back at requires_operator, the janitor does not select it — another
+  // retry window requires another explicit operator reset.
+  const pass = await runE2EJanitor(repoAs, stagingEnv, new Date(now.getTime() + 10 * 60 * 60 * 1000), false);
+  assert.equal(pass.expired_runs_seen, 0);
 });

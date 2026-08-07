@@ -142,11 +142,17 @@ one of two paths (available as CLI commands and control-surface routes):
   `operator_acknowledged` is always reported as a cleanup *failure* by the
   verification script and cleanup CLI. Requires explicit `--confirm` to
   prevent accidental acknowledgement.
-- **Reset** (`resetCleanup`, CLI: `--reset`): moves the run back to
-  `pending` so the janitor (or an explicit `requestCleanup` call) can
-  retry. Use after fixing the underlying issue. Note: reset does not
-  clear per-resource attempt counters, so an exhausted resource stays
-  exhausted even after reset.
+- **Reset** (`resetCleanup`, CLI: `--reset --confirm`): re-arms the run's
+  safely retryable failed resources (`rows_remaining`, `exception`) by
+  resetting their attempt counters to 0 — one fresh bounded
+  `MAX_CLEANUP_ATTEMPTS` window — and moves the run back to `pending` so
+  the janitor (or an explicit `requestCleanup` call) can retry. Use after
+  fixing the underlying issue. `ownership_mismatch` resources are **never**
+  re-armed: they are permanent, and if a run has no safely retryable
+  failed resources at all, reset is refused with a `409` (it could not
+  change the outcome — resolve manually and acknowledge instead). Each new
+  retry window requires another explicit, confirmed operator reset; there
+  is no infinite automatic retry path.
 
 Both operations are race-safe: the underlying UPDATE is a compare-and-swap
 on `cleanup_status = 'requires_operator'`, and the control layer checks the
@@ -224,9 +230,12 @@ Default expiry: 2 hours for `github_push`-sourced runs, 4 hours for
   manual attention. The janitor will NOT automatically retry it. Two
   operator CLI commands exist:
   - **Reset for retry:**
-    `npm run e2e:staging:cleanup -- --run-id <uuid> --reset`
-    Moves the run back to `pending`. The janitor picks it up on the
-    next cron tick. Note: per-resource attempt counters are not reset.
+    `npm run e2e:staging:cleanup -- --run-id <uuid> --reset --confirm`
+    Re-arms safely retryable failed resources (attempt counters back to
+    0 for one new bounded window) and moves the run back to `pending`;
+    the janitor picks it up on the next cron tick. `ownership_mismatch`
+    is never re-armed, and reset is refused (`409`) when the run has no
+    safely retryable failed resources.
   - **Acknowledge:**
     `npm run e2e:staging:cleanup -- --run-id <uuid> --acknowledge --confirm`
     Marks the run as `operator_acknowledged` and sets `cleaned_at`,

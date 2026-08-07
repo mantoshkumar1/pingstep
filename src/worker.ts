@@ -286,7 +286,8 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     const e2eResetMatch = url.pathname.match(/^\/v1\/internal\/e2e\/runs\/([0-9a-f-]{8,36})\/reset$/i);
     if (request.method === 'POST' && e2eResetMatch) {
       await requireE2EControl(request, env);
-      return json(await resetCleanup(new E2ERegistryRepository(env.DB), e2eResetMatch[1]));
+      const body = await readJsonBody(request, MAX_CONTROL_BODY_BYTES) as { confirm?: unknown };
+      return json(await resetCleanup(new E2ERegistryRepository(env.DB), e2eResetMatch[1], body.confirm === true));
     }
     if (request.method === 'POST' && url.pathname === '/v1/internal/e2e/janitor/run') {
       await requireE2EControl(request, env);

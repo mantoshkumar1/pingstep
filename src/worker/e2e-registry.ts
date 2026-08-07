@@ -156,9 +156,28 @@ export class E2ERegistryRepository {
   }
 
   /**
+   * Operator re-arm: starts a new bounded retry window for this run's safely
+   * retryable failed resources only.  Resets cleanup_attempts to 0 for
+   * resources whose failure code is transient ('rows_remaining' or
+   * 'exception').  NEVER touches 'ownership_mismatch' — that failure is
+   * permanent and must not be silently re-armed.  Returns the number of
+   * re-armed resources.
+   */
+  async rearmRetryableResources(runId: string): Promise<number> {
+    const result = await this.db.prepare(`
+      UPDATE e2e_test_resources
+      SET cleanup_attempts = 0
+      WHERE run_id = ? AND lifecycle = 'cleanup_failed' AND cleanup_failure_code IN ('rows_remaining', 'exception')
+    `).bind(runId).run();
+    return result.meta.changes;
+  }
+
+  /**
    * Operator resets a requires_operator run back to 'pending' for another
    * automatic retry attempt.  Clears cleanup_started_at so it can be
-   * re-leased.
+   * re-leased.  Callers must re-arm retryable resources first
+   * (rearmRetryableResources) — this CAS alone does not touch resource
+   * attempt counters or failure codes.
    */
   async resetCleanup(id: string): Promise<boolean> {
     const result = await this.db.prepare(`

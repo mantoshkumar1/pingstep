@@ -347,15 +347,41 @@ export async function acknowledgeCleanup(repository: E2ERegistryRepository, runI
   return { run_id: runId, cleanup_status: 'operator_acknowledged' };
 }
 
+/** Transient failure codes that an explicit operator reset may safely re-arm. */
+const RETRYABLE_CLEANUP_FAILURE_CODES: ReadonlySet<string> = new Set(['rows_remaining', 'exception']);
+
 /**
- * Operator resets a requires_operator run back to 'pending' for another
- * automatic retry pass (janitor or explicit requestCleanup).
+ * Operator resets a requires_operator run for one new bounded automatic
+ * retry window (janitor or explicit requestCleanup).
+ *
+ * Honest recovery contract:
+ * - Requires explicit confirmation (confirm: true) — a reset re-arms
+ *   resources, so it must never happen by accident.
+ * - Re-arms ONLY safely retryable failures ('rows_remaining', 'exception')
+ *   by resetting their cleanup_attempts to 0, giving them one fresh
+ *   MAX_CLEANUP_ATTEMPTS window.  Automatic retry stays capped: each new
+ *   window requires another explicit operator reset — there is no infinite
+ *   automatic retry path.
+ * - NEVER re-arms 'ownership_mismatch' — that failure is permanent.  If a
+ *   run has no safely retryable failed resources at all, reset is refused
+ *   with a 409, because it could not lead to a different outcome; the
+ *   supported path is manual resolution plus acknowledge.
  */
-export async function resetCleanup(repository: E2ERegistryRepository, runId: string): Promise<{ run_id: string; cleanup_status: E2ECleanupStatus }> {
+export async function resetCleanup(repository: E2ERegistryRepository, runId: string, confirmed: boolean): Promise<{ run_id: string; cleanup_status: E2ECleanupStatus; rearmed_resources: number }> {
+  if (!confirmed) throw new HttpError(400, 'Reset requires explicit confirmation (confirm: true).');
   const run = await requireRun(repository, runId);
   if (run.cleanup_status !== 'requires_operator') {
     throw new HttpError(409, `Run cleanup_status is '${run.cleanup_status}', not 'requires_operator'.`);
   }
+  const resources = await repository.listResourcesForRun(runId);
+  const retryable = resources.filter((r) => r.lifecycle === 'cleanup_failed' && r.cleanup_failure_code !== null && RETRYABLE_CLEANUP_FAILURE_CODES.has(r.cleanup_failure_code));
+  if (retryable.length === 0) {
+    throw new HttpError(409, "Reset refused: this run has no safely retryable failed resources ('ownership_mismatch' is permanent and is never re-armed). Resolve the resources manually, then acknowledge the run.");
+  }
+  // Re-arm before the run-status CAS.  If the CAS below loses a race, the
+  // zeroed attempt counters are harmless: the run is still under operator
+  // control (acknowledged, or reset by the concurrent caller).
+  const rearmed = await repository.rearmRetryableResources(runId);
   // Same compare-and-swap discipline as acknowledgeCleanup: if a concurrent
   // caller changed the run after our read, the UPDATE affects zero rows —
   // report the actual state as a conflict rather than claiming 'pending'.
@@ -364,7 +390,7 @@ export async function resetCleanup(repository: E2ERegistryRepository, runId: str
     const current = await repository.getRun(runId);
     throw new HttpError(409, `Reset was not applied: run cleanup_status is now '${current?.cleanup_status ?? 'unknown'}', not 'requires_operator' (concurrent modification).`);
   }
-  return { run_id: runId, cleanup_status: 'pending' };
+  return { run_id: runId, cleanup_status: 'pending', rearmed_resources: rearmed };
 }
 
 export async function getRunStatus(repository: E2ERegistryRepository, runId: string) {

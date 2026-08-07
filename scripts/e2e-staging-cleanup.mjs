@@ -12,7 +12,11 @@
  *   (default)       Request automatic cleanup and poll to terminal.
  *   --acknowledge   Mark a requires_operator run as operator-resolved.
  *                   Requires --confirm.
- *   --reset         Move a requires_operator run back to pending for retry.
+ *   --reset         Re-arm a requires_operator run's safely retryable failed
+ *                   resources (never ownership_mismatch) for one new bounded
+ *                   retry window and move the run back to pending.
+ *                   Requires --confirm. Refused (409) when the run has no
+ *                   safely retryable failed resources.
  *
  * Required environment variables:
  *   PINGSTEP_STAGING_BASE_URL
@@ -21,7 +25,7 @@
  * Usage:
  *   npm run e2e:staging:cleanup -- --run-id <uuid>
  *   npm run e2e:staging:cleanup -- --run-id <uuid> --acknowledge --confirm
- *   npm run e2e:staging:cleanup -- --run-id <uuid> --reset
+ *   npm run e2e:staging:cleanup -- --run-id <uuid> --reset --confirm
  */
 
 import { assertStagingUrl } from './lib/staging-e2e.mjs';
@@ -56,7 +60,7 @@ async function callControl(baseUrl, controlToken, method, path, body) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.runId) {
-    console.error('Usage: npm run e2e:staging:cleanup -- --run-id <uuid> [--acknowledge --confirm | --reset]');
+    console.error('Usage: npm run e2e:staging:cleanup -- --run-id <uuid> [--acknowledge --confirm | --reset --confirm]');
     process.exitCode = 1;
     return;
   }
@@ -83,8 +87,13 @@ async function main() {
   }
 
   if (args.reset) {
-    console.log(`Resetting E2E run ${args.runId} back to pending for retry...`);
-    const result = await callControl(baseUrl, controlToken, 'POST', `/v1/internal/e2e/runs/${args.runId}/reset`, {});
+    if (!args.confirm) {
+      console.error('--reset requires --confirm: it re-arms safely retryable failed resources for one new bounded retry window.');
+      process.exitCode = 1;
+      return;
+    }
+    console.log(`Resetting E2E run ${args.runId}: re-arming safely retryable failed resources for one new bounded retry window...`);
+    const result = await callControl(baseUrl, controlToken, 'POST', `/v1/internal/e2e/runs/${args.runId}/reset`, { confirm: true });
     console.log(JSON.stringify(result, null, 2));
     return;
   }
