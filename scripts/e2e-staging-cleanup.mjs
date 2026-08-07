@@ -33,6 +33,8 @@ function parseArgs(argv) {
     if (argv[i] === '--acknowledge') args.acknowledge = true;
     if (argv[i] === '--reset') args.reset = true;
     if (argv[i] === '--confirm') args.confirm = true;
+    if (argv[i] === '--timeout-ms') args.timeoutMs = Number(argv[i + 1]);
+    if (argv[i] === '--poll-interval-ms') args.pollIntervalMs = Number(argv[i + 1]);
   }
   return args;
 }
@@ -93,10 +95,21 @@ async function main() {
   harness.runId = args.runId;
 
   console.log(`Requesting cleanup for E2E run ${args.runId}...`);
-  const result = await harness.cleanup();
+  const options = Number.isFinite(args.pollIntervalMs) && args.pollIntervalMs > 0 ? { pollIntervalMs: args.pollIntervalMs } : {};
+  const result = Number.isFinite(args.timeoutMs) && args.timeoutMs > 0
+    ? await harness.cleanup(args.timeoutMs, options)
+    : await harness.cleanup(undefined, options);
   console.log(JSON.stringify(result, null, 2));
 
-  process.exitCode = result.cleanup_status === 'requires_operator' || result.cleanup_status === 'error' ? 1 : 0;
+  // Only a genuinely successful terminal cleanup state ('completed' or
+  // 'completed_with_absent_resources') exits 0. A nonterminal status at the
+  // poll timeout ('pending', 'in_progress', 'unknown'), 'requires_operator',
+  // 'operator_acknowledged', and 'error' all mean synthetic resources may
+  // remain in staging — report failure, never success.
+  if (result.successful !== true) {
+    console.error(`Cleanup did not reach a successful terminal state (status: ${result.cleanup_status}).`);
+  }
+  process.exitCode = result.successful === true ? 0 : 1;
 }
 
 main().catch((error) => {

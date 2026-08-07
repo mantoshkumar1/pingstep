@@ -335,7 +335,15 @@ export async function acknowledgeCleanup(repository: E2ERegistryRepository, runI
   if (run.cleanup_status !== 'requires_operator') {
     throw new HttpError(409, `Run cleanup_status is '${run.cleanup_status}', not 'requires_operator'.`);
   }
-  await repository.acknowledgeCleanup(runId, now.toISOString());
+  // The repository UPDATE is a compare-and-swap: if a concurrent caller
+  // changed the run between our read above and this write, it affects zero
+  // rows.  Never claim a transition that did not occur — refetch and report
+  // the actual state as a conflict instead.
+  const applied = await repository.acknowledgeCleanup(runId, now.toISOString());
+  if (!applied) {
+    const current = await repository.getRun(runId);
+    throw new HttpError(409, `Acknowledgement was not applied: run cleanup_status is now '${current?.cleanup_status ?? 'unknown'}', not 'requires_operator' (concurrent modification).`);
+  }
   return { run_id: runId, cleanup_status: 'operator_acknowledged' };
 }
 
@@ -348,7 +356,14 @@ export async function resetCleanup(repository: E2ERegistryRepository, runId: str
   if (run.cleanup_status !== 'requires_operator') {
     throw new HttpError(409, `Run cleanup_status is '${run.cleanup_status}', not 'requires_operator'.`);
   }
-  await repository.resetCleanup(runId);
+  // Same compare-and-swap discipline as acknowledgeCleanup: if a concurrent
+  // caller changed the run after our read, the UPDATE affects zero rows —
+  // report the actual state as a conflict rather than claiming 'pending'.
+  const applied = await repository.resetCleanup(runId);
+  if (!applied) {
+    const current = await repository.getRun(runId);
+    throw new HttpError(409, `Reset was not applied: run cleanup_status is now '${current?.cleanup_status ?? 'unknown'}', not 'requires_operator' (concurrent modification).`);
+  }
   return { run_id: runId, cleanup_status: 'pending' };
 }
 

@@ -30,6 +30,7 @@
  */
 
 import { writeFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { E2EPhaseError, StagingE2EHarness, redact } from './lib/staging-e2e.mjs';
 
 const JOB_CONFIG = {
@@ -297,7 +298,7 @@ async function main() {
     }
   }
 
-  const cleanupFailed = cleanupResult.cleanup_status === 'requires_operator' || cleanupResult.cleanup_status === 'error';
+  const cleanupFailed = isCleanupFailure(cleanupResult);
 
   if (testError) {
     console.error(`\n❌ FAILED at phase: ${testError.phase}`);
@@ -318,18 +319,40 @@ async function main() {
     console.error(`   The product test passed but the registry was not updated — this is a nonzero exit.`);
   }
   if (cleanupFailed) {
-    console.error(`\n⚠️  Cleanup did not complete cleanly: ${cleanupResult.cleanup_status}${cleanupResult.error ? ` (${cleanupResult.error})` : ''}`);
+    console.error(`\n⚠️  Cleanup did not reach a successful terminal state: ${cleanupResult.cleanup_status}${cleanupResult.error ? ` (${cleanupResult.error})` : ''}`);
+    console.error(`   Only 'completed' or 'completed_with_absent_resources' counts as cleanup success — a nonterminal status at the poll timeout means synthetic resources may remain in staging.`);
     console.error(`   E2E run id: ${harness.runId} — rerun 'npm run e2e:staging:cleanup -- --run-id ${harness.runId}' or check the janitor.`);
   }
 
-  // testError: product test failure.  finalizationError: completeRun() failed
-  // (registry not updated — must be nonzero even if test passed).
-  // cleanupFailed: resource cleanup did not complete.
-  process.exitCode = testError || finalizationError || cleanupFailed ? 1 : 0;
+  process.exitCode = computeExitCode({ testError, finalizationError, cleanupResult });
 }
 
-main().catch((error) => {
-  console.error(`\n💥 Unexpected error: ${error.message}`);
-  console.error(error.stack);
-  process.exitCode = 1;
-});
+/**
+ * Cleanup counts as failed unless the harness reports an explicitly
+ * successful terminal state. Nonterminal statuses left at the poll
+ * timeout ('pending', 'in_progress', 'unknown'), 'requires_operator',
+ * 'operator_acknowledged', and 'error' are all failures — synthetic
+ * resources may still exist in staging.
+ */
+export function isCleanupFailure(cleanupResult) {
+  return cleanupResult?.successful !== true;
+}
+
+/**
+ * testError: product test failure.  finalizationError: completeRun() failed
+ * (registry not updated — must be nonzero even if the test passed).
+ * cleanupResult: resource cleanup must reach a genuinely successful
+ * terminal state, or the overall run fails.
+ */
+export function computeExitCode({ testError, finalizationError, cleanupResult }) {
+  return testError || finalizationError || isCleanupFailure(cleanupResult) ? 1 : 0;
+}
+
+// Only execute when run directly (not when imported by tests).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(`\n💥 Unexpected error: ${error.message}`);
+    console.error(error.stack);
+    process.exitCode = 1;
+  });
+}

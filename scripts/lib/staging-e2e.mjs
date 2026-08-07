@@ -16,7 +16,21 @@
 const PRODUCTION_PATTERNS = [/pingstep\.dev$/i, /pingstep\.com$/i, /\/\/pingstep\./i];
 const CLEANUP_POLL_INTERVAL_MS = 3_000;
 const CLEANUP_POLL_TIMEOUT_MS = 60_000;
+const MAX_CLEANUP_REQUEST_ATTEMPTS = 3;
 const TERMINAL_CLEANUP_STATUSES = new Set(['completed', 'completed_with_absent_resources', 'requires_operator', 'operator_acknowledged']);
+
+/**
+ * Only these states mean cleanup genuinely succeeded. Everything else —
+ * nonterminal states left at a poll timeout ('pending', 'in_progress',
+ * 'unknown'), 'requires_operator', 'operator_acknowledged' (an operator
+ * resolved a failure; automatic cleanup did not succeed), and 'error' —
+ * must be reported as a cleanup failure by callers, never as success.
+ */
+const SUCCESSFUL_CLEANUP_STATUSES = new Set(['completed', 'completed_with_absent_resources']);
+
+export function isCleanupSuccessful(status) {
+  return SUCCESSFUL_CLEANUP_STATUSES.has(status);
+}
 
 export function redact(value) {
   if (!value || typeof value !== 'string' || value.length < 12) return '***';
@@ -124,35 +138,66 @@ export class StagingE2EHarness {
   }
 
   /** Polls run status until cleanup reaches a terminal state or the timeout elapses. */
-  async pollCleanupToTerminal(timeoutMs = CLEANUP_POLL_TIMEOUT_MS, { signal } = {}) {
+  async pollCleanupToTerminal(timeoutMs = CLEANUP_POLL_TIMEOUT_MS, { signal, pollIntervalMs = CLEANUP_POLL_INTERVAL_MS } = {}) {
     if (!this.runId) throw new Error('Call registerRun() before pollCleanupToTerminal().');
     const deadline = Date.now() + timeoutMs;
     let last = null;
     while (Date.now() < deadline) {
       last = await this.call('GET', `/v1/internal/e2e/runs/${this.runId}`, undefined, { signal });
       if (TERMINAL_CLEANUP_STATUSES.has(last.run.cleanup_status)) return last;
-      await sleep(CLEANUP_POLL_INTERVAL_MS);
+      await sleep(pollIntervalMs);
     }
     return last;
   }
 
   /**
    * First line of defense: request cleanup and poll it to a terminal state,
-   * bounded by its own shorter timeout so it can never hang indefinitely.
-   * Returns a safe summary; never throws — cleanup failures are reported,
-   * not thrown, so they don't mask the original test failure.
+   * bounded by its own overall timeout so it can never hang indefinitely.
+   * While the run remains retryable (a nonterminal status such as 'pending'
+   * or 'in_progress'), performs bounded re-attempts (re-requesting cleanup,
+   * which re-leases a 'pending' run) within the same time budget.
+   *
+   * Returns a safe summary with an explicit `successful` boolean; only
+   * 'completed' and 'completed_with_absent_resources' are ever reported as
+   * successful — a nonterminal status left at the timeout is a failure.
+   * Never throws — cleanup failures are reported, not thrown, so they
+   * don't mask the original test failure.
    */
-  async cleanup(timeoutMs = CLEANUP_POLL_TIMEOUT_MS) {
-    if (!this.runId) return { attempted: false, cleanup_status: 'not_started', run_id: null };
+  async cleanup(timeoutMs = CLEANUP_POLL_TIMEOUT_MS, { pollIntervalMs = CLEANUP_POLL_INTERVAL_MS } = {}) {
+    if (!this.runId) return { attempted: false, successful: false, cleanup_status: 'not_started', run_id: null };
+    const deadline = Date.now() + timeoutMs;
     // Use a fresh signal for cleanup calls so that an aborted overall signal
     // (from a test timeout) does not prevent cleanup from completing.
     const cleanupSignal = AbortSignal.timeout(timeoutMs + 10_000);
+    // Each re-attempt gets its own slice of the overall budget so a
+    // nonterminal poll cannot consume the whole timeout and starve the
+    // remaining bounded re-attempts.
+    const perAttemptMs = Math.max(1, Math.floor(timeoutMs / MAX_CLEANUP_REQUEST_ATTEMPTS));
+    let status = 'unknown';
+    let resources = [];
     try {
-      await this.requestCleanup({ signal: cleanupSignal });
-      const polled = await this.pollCleanupToTerminal(timeoutMs, { signal: cleanupSignal });
-      return { attempted: true, cleanup_status: polled?.run?.cleanup_status ?? 'unknown', run_id: this.runId, resources: polled?.resources ?? [] };
+      for (let attempt = 1; attempt <= MAX_CLEANUP_REQUEST_ATTEMPTS; attempt += 1) {
+        const requested = await this.requestCleanup({ signal: cleanupSignal });
+        if (typeof requested?.cleanup_status === 'string') status = requested.cleanup_status;
+        if (Array.isArray(requested?.resources)) resources = requested.resources;
+        if (!TERMINAL_CLEANUP_STATUSES.has(status)) {
+          const budget = Math.min(perAttemptMs, deadline - Date.now());
+          if (budget > 0) {
+            const polled = await this.pollCleanupToTerminal(budget, { signal: cleanupSignal, pollIntervalMs });
+            if (typeof polled?.run?.cleanup_status === 'string') status = polled.run.cleanup_status;
+            if (Array.isArray(polled?.resources)) resources = polled.resources;
+          }
+        }
+        if (SUCCESSFUL_CLEANUP_STATUSES.has(status)) {
+          return { attempted: true, successful: true, cleanup_status: status, run_id: this.runId, resources };
+        }
+        // requires_operator / operator_acknowledged are terminal for automatic
+        // cleanup — re-requesting cannot change them, so stop re-attempting.
+        if (TERMINAL_CLEANUP_STATUSES.has(status) || Date.now() >= deadline) break;
+      }
+      return { attempted: true, successful: false, cleanup_status: status, run_id: this.runId, resources };
     } catch (error) {
-      return { attempted: true, cleanup_status: 'error', run_id: this.runId, error: error instanceof Error ? error.message : String(error) };
+      return { attempted: true, successful: false, cleanup_status: 'error', run_id: this.runId, error: error instanceof Error ? error.message : String(error) };
     }
   }
 

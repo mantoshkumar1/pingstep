@@ -133,14 +133,26 @@ one of two paths (available as CLI commands and control-surface routes):
 
 - **Acknowledge** (`acknowledgeCleanup`, CLI: `--acknowledge --confirm`):
   marks the run as `operator_acknowledged` with `cleaned_at` set, making
-  it eligible for the 30-day purge. Use when manual cleanup has been
-  performed externally or the resources are confirmed safe to leave.
-  Requires explicit `--confirm` to prevent accidental acknowledgement.
+  it eligible for the 30-day purge. Use **only** when manual cleanup has
+  been performed externally or the resources are confirmed safe to leave —
+  acknowledgement is the documented operator-resolution policy under which
+  an acknowledged run becomes purgeable; it never converts unresolved
+  synthetic-resource leakage into an automatic-cleanup success. Resources
+  keep their `cleanup_failed` lifecycle and failure codes as evidence, and
+  `operator_acknowledged` is always reported as a cleanup *failure* by the
+  verification script and cleanup CLI. Requires explicit `--confirm` to
+  prevent accidental acknowledgement.
 - **Reset** (`resetCleanup`, CLI: `--reset`): moves the run back to
   `pending` so the janitor (or an explicit `requestCleanup` call) can
   retry. Use after fixing the underlying issue. Note: reset does not
   clear per-resource attempt counters, so an exhausted resource stays
   exhausted even after reset.
+
+Both operations are race-safe: the underlying UPDATE is a compare-and-swap
+on `cleanup_status = 'requires_operator'`, and the control layer checks the
+mutation result. If a concurrent caller changed the run between the read and
+the write, the API returns `409` reporting the run's actual current state —
+it never claims a transition that did not occur.
 
 A per-run lease (`acquireCleanupLease`, a compare-and-swap on
 `cleanup_status`) prevents two concurrent cleanup calls for the same run
@@ -152,7 +164,15 @@ terminal statuses (`completed`, `completed_with_absent_resources`), so
 
 1. **In-process cleanup** — `scripts/verify-late-run-staging.mjs` requests
    cleanup and polls it to a terminal state in a `finally`-equivalent path,
-   regardless of whether the test passed or failed.
+   regardless of whether the test passed or failed. The harness performs
+   bounded re-attempts (up to 3 within its time budget) while the run
+   remains retryable. Only `completed` and
+   `completed_with_absent_resources` count as cleanup success: a
+   nonterminal status (`pending`, `in_progress`, `unknown`) left at the
+   poll timeout, `requires_operator`, `operator_acknowledged`, and `error`
+   all cause a nonzero exit from both the verification script and
+   `npm run e2e:staging:cleanup`, because synthetic resources may still
+   exist in staging.
 2. **`if: always()` workflow step** — `.github/workflows/quality.yml`'s
    `e2e-late-run` and `e2e-late-run-manual` jobs each have a "Clean up E2E
    resources" step that always runs, even if the verification step failed,
