@@ -161,8 +161,8 @@ Full rules live in [`AGENTS.md`](./AGENTS.md#quality-contract). Non-negotiable s
 ## 13. Exact next action
 
 Inspect live Project board #3 and the authoritative open issues under [#181](https://github.com/mantoshkumar1/pingstep/issues/181),
-then present the next eligible PingStep implementation slice for founder selection. Do not begin a new feature
-issue until that selection is made.
+then present the next eligible PingStep implementation slice for founder selection. Do not begin that work;
+implementation may start only after founder approval of the selected slice.
 
 ## 14. State-update rules
 
