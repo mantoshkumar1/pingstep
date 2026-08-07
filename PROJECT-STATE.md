@@ -106,9 +106,6 @@ explicitly transferred by the founder.
   [runbook](./docs/staging-e2e-resource-lifecycle.md)).
 - Production deploys only via the manual tagged release workflow; merges to `main` deploy staging only
   ([README safe release path](./README.md)).
-- Branch protection on `main`: required status check "Lint, test, and build", linear history, no force pushes,
-  no branch deletions, conversation resolution required; PR approvals are **not** currently required
-  (founder decision, 2026-08-07).
 
 ### Current factual implementation state
 
@@ -119,6 +116,12 @@ explicitly transferred by the founder.
   [#167](https://github.com/mantoshkumar1/pingstep/issues/167).
 - Project board #3 currently exposes only `Todo` / `In Progress` / `Done`; the richer canonical states remain
   unimplemented work owned by [#181](https://github.com/mantoshkumar1/pingstep/issues/181).
+- Branch protection on `main`, as currently configured (a mutable configuration fact, **not** a recorded
+  founder policy decision — no authoritative approval is on record): required status check
+  "Lint, test, and build" with strict up-to-date branches, linear history, no force pushes, no branch
+  deletions, conversation resolution required, enforced for admins; pull-request approvals are not currently
+  required. Verify against the live repository settings before relying on it. If the founder wants any of this
+  to become settled policy, record the decision in an authoritative issue and link it here.
 
 ### Review findings and defects
 
@@ -185,9 +188,13 @@ Full rules live in [`AGENTS.md`](./AGENTS.md#quality-contract). Non-negotiable s
 
 ## 13. Exact next action
 
-Review [PR #189](https://github.com/mantoshkumar1/pingstep/pull/189) (strategy/review agent) against issue
-#188's body **and all five amendment comments**, then merge it before the next feature-level implementation
-wave begins.
+The strategy/review agent reviews [PR #189](https://github.com/mantoshkumar1/pingstep/pull/189) against issue
+#188's body **and all five amendment comments**. If the review is clean, the founder then explicitly decides
+whether to approve the merge. Merge only after that founder approval, and before the next feature-level
+implementation wave begins.
+
+Review completion is not merge authority: reviewing and approving are separate steps, and only the founder
+approves a merge.
 
 ## 14. State-update rules
 
@@ -216,6 +223,6 @@ issue. Additional rules:
 - **Verified by:** Claude (implementation agent) for issue #188 — this file is #188's own deliverable, which is
   why an implementation agent authored it. Ongoing consolidation belongs to the strategy/review agent per
   section 14; this signature is not a precedent for implementation agents self-consolidating state.
-- **Source commit:** `2a0e5ab` (`main` at branch creation)
+- **Source commit:** `2a0e5ab5a1547a6acd45b34a373f88973fe47fe6` (`main` at branch creation)
 - **Verification basis:** live GitHub issue/PR/board/CI state, live staging and production `/health`, and the
   working tree at the commit above.

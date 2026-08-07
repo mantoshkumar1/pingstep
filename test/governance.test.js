@@ -87,6 +87,48 @@ test('PROJECT-STATE.md separates founder-approved decisions from findings, recom
   }
 });
 
+/** Returns the bullet lines under a given `###` subsection of PROJECT-STATE.md. */
+function subsectionBullets(content, heading) {
+  const start = content.indexOf(`### ${heading}`);
+  assert.notEqual(start, -1, `PROJECT-STATE.md must contain the "${heading}" subsection`);
+  const rest = content.slice(start + heading.length);
+  const end = rest.search(/\n#{2,3}\s/);
+  const body = end === -1 ? rest : rest.slice(0, end);
+  // Group wrapped continuation lines into the bullet they belong to, so a
+  // source link on a later line still counts.
+  const bullets = [];
+  for (const line of body.split('\n')) {
+    if (/^[-*]\s+\S/.test(line)) bullets.push(line);
+    else if (bullets.length && line.trim()) bullets[bullets.length - 1] += ` ${line.trim()}`;
+  }
+  return bullets;
+}
+
+test('every founder-approved settled decision cites a durable authoritative source', () => {
+  // Review finding (PR #189): a mutable configuration snapshot was recorded as
+  // a founder decision with no authoritative source. A settled decision must
+  // link an issue, PR, or durable repository document — otherwise it belongs
+  // under factual implementation state.
+  const bullets = subsectionBullets(read(PROJECT_STATE), 'Founder-approved settled decisions');
+  assert.ok(bullets.length > 0, 'the settled-decisions subsection must not be empty');
+  const unsourced = bullets.filter((line) => !/\(#\d+|\[[^\]]+\]\([^)]+\)|issues\/\d+|pull\/\d+/.test(line));
+  assert.deepEqual(unsourced, [],
+    `these settled decisions cite no authoritative source:\n${unsourced.join('\n')}`);
+});
+
+test('PROJECT-STATE.md does not delegate merge authority to the reviewer', () => {
+  // Review finding (PR #189): the founder is the sole authority; review
+  // completion must not read as permission to merge.
+  const content = read(PROJECT_STATE);
+  const start = content.indexOf('## 13.');
+  const section = content.slice(start, content.indexOf('\n## ', start + 5));
+  assert.match(section, /founder/i, 'the exact next action must name founder approval');
+  assert.match(section, /only after (that )?founder approval|founder .*(approve|decides)/i,
+    'merge must be gated on explicit founder approval');
+  assert.doesNotMatch(section, /then merge it\b/i,
+    'the reviewer must not be instructed to merge as a consequence of reviewing');
+});
+
 test('PROJECT-STATE.md records a verified date, verifier, and source commit', () => {
   // Markdown emphasis around the labels must not defeat the check.
   const content = read(PROJECT_STATE).replace(/\*/g, '');
@@ -107,16 +149,37 @@ test('PROJECT-STATE.md states that live GitHub state outranks the snapshot', () 
  */
 const PLACEHOLDER = /^(your|my|the|<|\{|\$|example|sample|test|dummy|placeholder|redacted|xxx|abc|token|secret|changeme)/i;
 
+/**
+ * A Git SHA-1 object id is exactly 40 lowercase hex characters and is
+ * structurally indistinguishable from a hex secret, so length alone cannot
+ * separate them. #188 requires PROJECT-STATE.md to record a source commit, and
+ * a full 40-character SHA is legitimate there. The exemption is therefore
+ * deliberately narrow: exactly 40 lowercase hex characters AND an unambiguous
+ * commit context immediately before it. Any other length (32, 64, …), any
+ * uppercase hex, and any 40-char token without commit context stay findings.
+ */
+const GIT_COMMIT_CONTEXT = /(commit|sha|head|revision|rev|\/commit\/|\/compare\/|\/tree\/)[^\n]{0,40}$/i;
+
+function isGitObjectId(content, match) {
+  const token = match[0];
+  if (token.length !== 40 || token !== token.toLowerCase()) return false;
+  return GIT_COMMIT_CONTEXT.test(content.slice(Math.max(0, match.index - 60), match.index));
+}
+
 export function findSecretLike(content) {
   const findings = [];
   const rules = [
     { pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/g, label: 'private key block' },
     { pattern: /\bsk_(live|test)_[A-Za-z0-9]{8,}/g, label: 'Stripe secret key' },
-    { pattern: /\bghp_[A-Za-z0-9]{20,}/g, label: 'GitHub personal access token' },
-    { pattern: /\b[0-9a-f]{32,}\b/gi, label: 'long hex secret-like value' }
+    { pattern: /\bghp_[A-Za-z0-9]{20,}/g, label: 'GitHub personal access token' }
   ];
   for (const { pattern, label } of rules) {
     for (const match of content.matchAll(pattern)) findings.push(`${label}: ${match[0].slice(0, 12)}…`);
+  }
+  // Long hex values, minus legitimate Git object ids in commit context.
+  for (const match of content.matchAll(/\b[0-9a-f]{32,}\b/gi)) {
+    if (isGitObjectId(content, match)) continue;
+    findings.push(`long hex secret-like value: ${match[0].slice(0, 12)}…`);
   }
   // Bearer values are only a finding when they do not look like a placeholder.
   for (const match of content.matchAll(/\bBearer\s+([A-Za-z0-9._-]{12,})/g)) {
@@ -136,6 +199,25 @@ test('the secret detector actually catches credential material (guard self-check
   assert.deepEqual(findSecretLike('Set E2E_CONTROL_TOKEN via wrangler secret put'), []);
   assert.deepEqual(findSecretLike('curl -H "authorization: Bearer your-secret-token"'), []);
   assert.deepEqual(findSecretLike('commit `2a0e5ab` on main'), []);
+});
+
+test('a legitimate full 40-character Git commit SHA is accepted, without weakening the scanner', () => {
+  // Review finding (PR #189): #188 requires recording a source commit, and the
+  // repository may legitimately use a full 40-character SHA. It must not be
+  // reported as a secret.
+  const sha = '2a0e5ab5a1547a6acd45b34a373f88973fe47fe6';
+  assert.deepEqual(findSecretLike(`- **Source commit:** \`${sha}\``), [], 'a full Git SHA in commit context must be allowed');
+  assert.deepEqual(findSecretLike(`Merged as commit ${sha} on main.`), []);
+  assert.deepEqual(findSecretLike(`https://github.com/mantoshkumar1/pingstep/commit/${sha}`), []);
+  assert.deepEqual(findSecretLike(`PR head SHA ${sha}`), []);
+
+  // The exemption must stay narrow — these all remain findings.
+  assert.equal(findSecretLike(`api_key = "${sha}"`).length, 1, 'a 40-char hex with no commit context is still a finding');
+  assert.equal(findSecretLike(`commit c2f4a9e1b8d7c6a5f4e3d2c1b0a99887`).length, 1, '32-char hex is not a Git object id');
+  assert.equal(findSecretLike(`commit ${sha.toUpperCase()}`).length, 1, 'uppercase hex is not a Git object id');
+  assert.equal(findSecretLike(`commit ${sha}${sha}`).length, 1, '80-char hex is not a Git object id');
+  // The real state file must still be clean under the narrowed rule.
+  assert.deepEqual(findSecretLike(read(PROJECT_STATE)), []);
 });
 
 test('governance files contain no secrets or credential material', () => {
