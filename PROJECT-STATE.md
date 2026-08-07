@@ -74,7 +74,7 @@ ChatGPT strategy/review owns this narrow governance branch under the state-write
 ## 7. Recently completed work
 
 - **[#188](https://github.com/mantoshkumar1/pingstep/issues/188) — shared AI project state and risk-based quality contract: completed.**
-  Delivered by [PR #189](https://github.com/mantoshkumar1/pingstep/pull/189), merged to `main` as
+  Delivered by [PR #189](https://github.com/mantoshkumar1/pingstep/pull/189), merged to `main` as commit
   `4cc6f727953a416e09b85d56688aa750a397df3d`. The issue was manually closed because PR #189 lacked a GitHub
   closing keyword; #190 exists to prevent that manual close step for future completed tasks.
 - **[#174](https://github.com/mantoshkumar1/pingstep/issues/174) — staging E2E isolation and cleanup: completed.**
@@ -98,7 +98,7 @@ ChatGPT strategy/review owns this narrow governance branch under the state-write
 
 ### Current factual implementation state
 
-- `main` at branch creation = `4cc6f727953a416e09b85d56688aa750a397df3d`.
+- `main` at branch creation = commit `4cc6f727953a416e09b85d56688aa750a397df3d`.
 - Latest migration remains `migrations/0009_e2e_registry.sql`; #190 adds no migration.
 - PR #191 changes governance/process only: PR template, cross-agent instructions, state snapshot, and
   deterministic governance tests. It does not change product runtime behavior.
@@ -158,10 +158,9 @@ Full rules live in [`AGENTS.md`](./AGENTS.md#quality-contract). Non-negotiable s
 ## 13. Exact next action
 
 Wait for PR [#191](https://github.com/mantoshkumar1/pingstep/pull/191) to have green CI on its final pushed head,
-then strategy/review must inspect the actual diff and evidence. If review-clean, merge only after founder
-approval — the founder authorization for this specific narrow change is recorded in
-[#190](https://github.com/mantoshkumar1/pingstep/issues/190). After merge, verify GitHub automatically closes
-#190; if it does not, treat that as a process defect.
+then strategy/review must inspect the actual diff and evidence. If review-clean, merge only after founder approval
+recorded in [#190](https://github.com/mantoshkumar1/pingstep/issues/190). After merge, verify GitHub automatically
+closes #190; if it does not, treat that as a process defect.
 
 ## 14. State-update rules
 
