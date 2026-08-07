@@ -58,7 +58,7 @@ governance structure checks), `test:coverage`, `test:e2e`, `worker:check`, `work
 
 ## State handoff
 
-- **Did this PR materially change [`PROJECT-STATE.md`](../PROJECT-STATE.md)?** `Yes` / `No`
+- **Did this PR materially change [`PROJECT-STATE.md`](https://github.com/mantoshkumar1/pingstep/blob/main/PROJECT-STATE.md)?** `Yes` / `No`
 - If `No`, state why no project-state update was required (routine PR detail belongs in the issue/PR).
 - **Remaining manual or provider actions:**
 - **Exact next action:**

@@ -125,7 +125,9 @@ test('PROJECT-STATE.md does not delegate merge authority to the reviewer', () =>
   assert.match(section, /founder/i, 'the exact next action must name founder approval');
   assert.match(section, /only after (that )?founder approval|founder .*(approve|decides)/i,
     'merge must be gated on explicit founder approval');
-  assert.doesNotMatch(section, /then merge it\b/i,
+  // Any phrasing that makes merging a consequence of reviewing is rejected,
+  // not just one literal wording. (Weakness found by the fresh-session exercise.)
+  assert.doesNotMatch(section, /\b(then|and)\s+merges?\b/i,
     'the reviewer must not be instructed to merge as a consequence of reviewing');
 });
 
@@ -158,7 +160,7 @@ const PLACEHOLDER = /^(your|my|the|<|\{|\$|example|sample|test|dummy|placeholder
  * commit context immediately before it. Any other length (32, 64, …), any
  * uppercase hex, and any 40-char token without commit context stay findings.
  */
-const GIT_COMMIT_CONTEXT = /(commit|sha|head|revision|rev|\/commit\/|\/compare\/|\/tree\/)[^\n]{0,40}$/i;
+const GIT_COMMIT_CONTEXT = /(\b(commit|sha|revision)\b|\/(commit|compare|tree)\/)[^\n]{0,40}$/i;
 
 function isGitObjectId(content, match) {
   const token = match[0];
@@ -213,6 +215,19 @@ test('a legitimate full 40-character Git commit SHA is accepted, without weakeni
 
   // The exemption must stay narrow — these all remain findings.
   assert.equal(findSecretLike(`api_key = "${sha}"`).length, 1, 'a 40-char hex with no commit context is still a finding');
+  // Substring traps: "header" contains "head"; "review"/"revoked"/"previous"
+  // contain "rev". These must NOT be treated as commit context. (Found by the
+  // #188 fresh-session review exercise against head 8d2ce7b.)
+  for (const trap of [
+    `Authorization header ${sha}`,
+    `review ${sha}`,
+    `revoked key ${sha}`,
+    `previous secret ${sha}`,
+    `X-Head-Token: ${sha}`,
+    `shared credential ${sha}`
+  ]) {
+    assert.equal(findSecretLike(trap).length, 1, `substring context must not exempt a secret: "${trap.slice(0, 28)}…"`);
+  }
   assert.equal(findSecretLike(`commit c2f4a9e1b8d7c6a5f4e3d2c1b0a99887`).length, 1, '32-char hex is not a Git object id');
   assert.equal(findSecretLike(`commit ${sha.toUpperCase()}`).length, 1, 'uppercase hex is not a Git object id');
   assert.equal(findSecretLike(`commit ${sha}${sha}`).length, 1, '80-char hex is not a Git object id');
