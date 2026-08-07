@@ -158,7 +158,11 @@ Both operations are race-safe: the underlying UPDATE is a compare-and-swap
 on `cleanup_status = 'requires_operator'`, and the control layer checks the
 mutation result. If a concurrent caller changed the run between the read and
 the write, the API returns `409` reporting the run's actual current state —
-it never claims a transition that did not occur.
+it never claims a transition that did not occur. For reset, the resource
+re-arm and the run-state transition execute atomically in a single D1
+transaction, both guarded by the run still being `requires_operator` — so a
+reset that loses the race (e.g. acknowledge-vs-reset) changes nothing at
+all: no attempt counter, failure code, or run field is modified.
 
 A per-run lease (`acquireCleanupLease`, a compare-and-swap on
 `cleanup_status`) prevents two concurrent cleanup calls for the same run

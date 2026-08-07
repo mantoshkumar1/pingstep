@@ -72,22 +72,24 @@ class MemoryE2ERegistryRepository {
     this.runs.set(id, { ...run, cleanup_status: 'operator_acknowledged', cleaned_at: now2 });
     return true;
   }
-  async resetCleanup(id: string) {
+  /**
+   * Mirrors E2ERegistryRepository.resetCleanupAndRearm's atomic contract:
+   * both the resource re-arm and the run CAS are guarded by the run still
+   * being 'requires_operator' — a lost race mutates nothing at all.
+   */
+  async resetCleanupAndRearm(id: string) {
     const run = this.runs.get(id);
-    if (!run || run.cleanup_status !== 'requires_operator') return false;
-    this.runs.set(id, { ...run, cleanup_status: 'pending', cleanup_started_at: null });
-    return true;
-  }
-  async rearmRetryableResources(runId: string) {
+    if (!run || run.cleanup_status !== 'requires_operator') return { applied: false, rearmedResources: 0 };
     let rearmed = 0;
     for (const [key, resource] of this.resources) {
-      if (resource.run_id === runId && resource.lifecycle === 'cleanup_failed'
+      if (resource.run_id === id && resource.lifecycle === 'cleanup_failed'
         && (resource.cleanup_failure_code === 'rows_remaining' || resource.cleanup_failure_code === 'exception')) {
         this.resources.set(key, { ...resource, cleanup_attempts: 0 });
         rearmed += 1;
       }
     }
-    return rearmed;
+    this.runs.set(id, { ...run, cleanup_status: 'pending', cleanup_started_at: null });
+    return { applied: true, rearmedResources: rearmed };
   }
   async requestCleanup(id: string) {
     const run = this.runs.get(id);
@@ -781,10 +783,10 @@ test('E2ERegistryRepository.acknowledgeCleanup has correct placeholder/bind arit
   await assert.doesNotReject(() => repository.acknowledgeCleanup('id', 'now'));
 });
 
-test('E2ERegistryRepository.resetCleanup has correct placeholder/bind arity', async () => {
+test('E2ERegistryRepository.resetCleanupAndRearm has correct placeholder/bind arity', async () => {
   const db = new StrictD1Database() as unknown as D1Database;
   const repository = new E2ERegistryRepository(db);
-  await assert.doesNotReject(() => repository.resetCleanup('id'));
+  await assert.doesNotReject(() => repository.resetCleanupAndRearm('id'));
 });
 
 // ── Finding 2: harness signal isolation test ──
@@ -1025,16 +1027,16 @@ test('resetCleanup returns 409 with the actual state when the CAS loses a race',
   const repoAs = repository as unknown as E2ERegistryRepository;
   const run = await runAtRequiresOperator(repository, 'e2e-late-reset-race');
   // Simulate a concurrent acknowledge landing between our requireRun() read
-  // and our reset UPDATE.
-  const originalReset = repository.resetCleanup.bind(repository);
+  // and our atomic reset transaction.
+  const originalAtomic = repository.resetCleanupAndRearm.bind(repository);
   const originalAck = repository.acknowledgeCleanup.bind(repository);
   let raced = false;
-  repository.resetCleanup = async (id: string) => {
+  repository.resetCleanupAndRearm = async (id: string) => {
     if (!raced) {
       raced = true;
       await originalAck(id, now.toISOString()); // concurrent operator acknowledges first
     }
-    return originalReset(id); // our CAS now matches zero rows → false
+    return originalAtomic(id); // the atomic guard now matches zero rows → not applied
   };
   await assert.rejects(
     () => resetCleanup(repoAs, run.id, true),
@@ -1122,4 +1124,54 @@ test('a reset re-armed window stays bounded: exhaustion returns to requires_oper
   // retry window requires another explicit operator reset.
   const pass = await runE2EJanitor(repoAs, stagingEnv, new Date(now.getTime() + 10 * 60 * 60 * 1000), false);
   assert.equal(pass.expired_runs_seen, 0);
+});
+
+// ── Sixth review: a reset that loses the acknowledge-vs-reset race must change NOTHING ──
+
+test('a reset that loses the acknowledge-vs-reset race leaves all resource attempt counters and failure evidence unchanged', async () => {
+  const repository = repo() as unknown as MemoryE2ERegistryRepository;
+  const repoAs = repository as unknown as E2ERegistryRepository;
+  const run = await runAtRequiresOperator(repository, 'e2e-late-atomic-race');
+
+  // Snapshot the retryable resource's evidence before the race: exhausted at
+  // 3 attempts with a 'rows_remaining' transient failure code.
+  const before = await repository.getResource(run.id, 'job', 'e2e-late-atomic-race');
+  assert.equal(before?.cleanup_attempts, 3);
+  assert.equal(before?.cleanup_failure_code, 'rows_remaining');
+  assert.equal(before?.lifecycle, 'cleanup_failed');
+
+  // Force the race: a concurrent acknowledge lands after resetCleanup()'s
+  // requireRun()/retryable-resource read but before its atomic
+  // re-arm + run-CAS transaction executes.
+  const originalAtomic = repository.resetCleanupAndRearm.bind(repository);
+  const originalAck = repository.acknowledgeCleanup.bind(repository);
+  let raced = false;
+  repository.resetCleanupAndRearm = async (id: string) => {
+    if (!raced) {
+      raced = true;
+      await originalAck(id, now.toISOString()); // the acknowledge wins the race
+    }
+    return originalAtomic(id);
+  };
+
+  await assert.rejects(
+    () => resetCleanup(repoAs, run.id, true),
+    (error: HttpError) => error.status === 409 && error.message.includes('operator_acknowledged')
+  );
+
+  // The lost reset mutated nothing: the run carries the concurrent
+  // acknowledge, and the resource's attempt counter and failure evidence
+  // are byte-for-byte what they were before the reset attempt.
+  const runAfter = await repository.getRun(run.id);
+  assert.equal(runAfter?.cleanup_status, 'operator_acknowledged');
+  const after = await repository.getResource(run.id, 'job', 'e2e-late-atomic-race');
+  assert.equal(after?.cleanup_attempts, 3, 'a lost reset must not re-arm the attempt counter');
+  assert.equal(after?.cleanup_failure_code, 'rows_remaining', 'a lost reset must not alter failure evidence');
+  assert.equal(after?.lifecycle, 'cleanup_failed', 'a lost reset must not alter resource lifecycle');
+  assert.deepEqual(after, before, 'the resource row must be completely unchanged when reset loses the race');
+
+  // And a lost reset grants no retry window: the acknowledged run stays
+  // terminal — replaying cleanup returns the cached state without leasing.
+  const replay = await performCleanup(repoAs, run.id, now);
+  assert.equal(replay.cleanup_status, 'operator_acknowledged');
 });

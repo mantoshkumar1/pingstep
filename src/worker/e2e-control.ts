@@ -366,6 +366,9 @@ const RETRYABLE_CLEANUP_FAILURE_CODES: ReadonlySet<string> = new Set(['rows_rema
  *   run has no safely retryable failed resources at all, reset is refused
  *   with a 409, because it could not lead to a different outcome; the
  *   supported path is manual resolution plus acknowledge.
+ * - The re-arm and the run-state transition are atomic: a reset that loses
+ *   a concurrent race returns 409 and leaves the run row and every
+ *   resource row (attempt counters, failure codes) completely unchanged.
  */
 export async function resetCleanup(repository: E2ERegistryRepository, runId: string, confirmed: boolean): Promise<{ run_id: string; cleanup_status: E2ECleanupStatus; rearmed_resources: number }> {
   if (!confirmed) throw new HttpError(400, 'Reset requires explicit confirmation (confirm: true).');
@@ -378,19 +381,18 @@ export async function resetCleanup(repository: E2ERegistryRepository, runId: str
   if (retryable.length === 0) {
     throw new HttpError(409, "Reset refused: this run has no safely retryable failed resources ('ownership_mismatch' is permanent and is never re-armed). Resolve the resources manually, then acknowledge the run.");
   }
-  // Re-arm before the run-status CAS.  If the CAS below loses a race, the
-  // zeroed attempt counters are harmless: the run is still under operator
-  // control (acknowledged, or reset by the concurrent caller).
-  const rearmed = await repository.rearmRetryableResources(runId);
-  // Same compare-and-swap discipline as acknowledgeCleanup: if a concurrent
-  // caller changed the run after our read, the UPDATE affects zero rows —
-  // report the actual state as a conflict rather than claiming 'pending'.
-  const applied = await repository.resetCleanup(runId);
+  // The re-arm and the run-status CAS execute atomically in one repository
+  // transaction, both guarded by the run still being 'requires_operator'.
+  // If a concurrent caller (e.g. an acknowledge) changed the run after our
+  // read, NOTHING is mutated — no resource attempt counter or failure
+  // evidence changes — and we report the actual state as a conflict rather
+  // than claiming 'pending'.
+  const { applied, rearmedResources } = await repository.resetCleanupAndRearm(runId);
   if (!applied) {
     const current = await repository.getRun(runId);
-    throw new HttpError(409, `Reset was not applied: run cleanup_status is now '${current?.cleanup_status ?? 'unknown'}', not 'requires_operator' (concurrent modification).`);
+    throw new HttpError(409, `Reset was not applied: run cleanup_status is now '${current?.cleanup_status ?? 'unknown'}', not 'requires_operator' (concurrent modification; no run or resource state was changed).`);
   }
-  return { run_id: runId, cleanup_status: 'pending', rearmed_resources: rearmed };
+  return { run_id: runId, cleanup_status: 'pending', rearmed_resources: rearmedResources };
 }
 
 export async function getRunStatus(repository: E2ERegistryRepository, runId: string) {

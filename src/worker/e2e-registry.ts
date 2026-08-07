@@ -156,36 +156,35 @@ export class E2ERegistryRepository {
   }
 
   /**
-   * Operator re-arm: starts a new bounded retry window for this run's safely
-   * retryable failed resources only.  Resets cleanup_attempts to 0 for
-   * resources whose failure code is transient ('rows_remaining' or
-   * 'exception').  NEVER touches 'ownership_mismatch' — that failure is
-   * permanent and must not be silently re-armed.  Returns the number of
-   * re-armed resources.
+   * Atomic operator reset: in a single D1 batch (one transaction), re-arms
+   * this run's safely retryable failed resources — cleanup_attempts back to
+   * 0 only for transient failure codes ('rows_remaining', 'exception'),
+   * NEVER 'ownership_mismatch', which is permanent — and CASes the run from
+   * 'requires_operator' to 'pending' (clearing cleanup_started_at so it can
+   * be re-leased).
+   *
+   * Both statements are guarded by the run still being 'requires_operator'
+   * (the resource UPDATE via an EXISTS subquery, the run UPDATE via its
+   * WHERE clause) and execute in one transaction, so a reset that loses a
+   * concurrent race (e.g. acknowledge-vs-reset) changes NOTHING — neither
+   * the run row nor any resource attempt counter or failure evidence.
    */
-  async rearmRetryableResources(runId: string): Promise<number> {
-    const result = await this.db.prepare(`
-      UPDATE e2e_test_resources
-      SET cleanup_attempts = 0
-      WHERE run_id = ? AND lifecycle = 'cleanup_failed' AND cleanup_failure_code IN ('rows_remaining', 'exception')
-    `).bind(runId).run();
-    return result.meta.changes;
-  }
-
-  /**
-   * Operator resets a requires_operator run back to 'pending' for another
-   * automatic retry attempt.  Clears cleanup_started_at so it can be
-   * re-leased.  Callers must re-arm retryable resources first
-   * (rearmRetryableResources) — this CAS alone does not touch resource
-   * attempt counters or failure codes.
-   */
-  async resetCleanup(id: string): Promise<boolean> {
-    const result = await this.db.prepare(`
-      UPDATE e2e_test_runs
-      SET cleanup_status = 'pending', cleanup_started_at = NULL
-      WHERE id = ? AND cleanup_status = 'requires_operator'
-    `).bind(id).run();
-    return result.meta.changes === 1;
+  async resetCleanupAndRearm(id: string): Promise<{ applied: boolean; rearmedResources: number }> {
+    const results = await this.db.batch([
+      this.db.prepare(`
+        UPDATE e2e_test_resources
+        SET cleanup_attempts = 0
+        WHERE run_id = ? AND lifecycle = 'cleanup_failed'
+          AND cleanup_failure_code IN ('rows_remaining', 'exception')
+          AND EXISTS (SELECT 1 FROM e2e_test_runs WHERE id = ? AND cleanup_status = 'requires_operator')
+      `).bind(id, id),
+      this.db.prepare(`
+        UPDATE e2e_test_runs
+        SET cleanup_status = 'pending', cleanup_started_at = NULL
+        WHERE id = ? AND cleanup_status = 'requires_operator'
+      `).bind(id)
+    ]);
+    return { applied: results[1]?.meta.changes === 1, rearmedResources: results[0]?.meta.changes ?? 0 };
   }
 
   async requestCleanup(id: string): Promise<boolean> {
