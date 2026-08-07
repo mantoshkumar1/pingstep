@@ -1,44 +1,109 @@
 # PingStep agent handbook
 
-This repository is the shared handoff for every coding assistant. Read this file before planning or editing. It applies to Codex, Claude, and any other agent working here.
+Durable, cross-agent operating rules for every coding assistant and reviewer working in this repository
+(Claude, Codex, ChatGPT, and future agents).
+
+**Read [`PROJECT-STATE.md`](./PROJECT-STATE.md) completely before planning or editing anything.** It is the
+shared current-state entry point: active work, owner, blockers, decisions, and the exact next action. This
+handbook holds only stable rules — it deliberately contains no prices, plans, launch status, active PR
+numbers, board columns, or other facts that drift. Those live in `PROJECT-STATE.md` and the authoritative
+GitHub issue.
 
 ## What PingStep is
 
-PingStep lets people monitor unattended jobs through explicit lifecycle events. Customer scripts send status updates; PingStep shows whether each run is active, stale, succeeded, or failed. It must not inspect customer systems, logs, credentials, or private job output.
+PingStep lets people monitor unattended jobs through explicit lifecycle events. Customer scripts send status
+updates; PingStep shows whether each run is active, stale, succeeded, or failed. It must not inspect customer
+systems, logs, credentials, or private job output.
 
 ## Source of truth
 
-- GitHub issue: why the work exists, its scope, success criteria, and decisions.
-- Pull request: exactly what changed, how it was verified, risks, and rollout result.
-- GitHub Project board: only the current status — Todo, In Progress, or Done.
-- `README.md`: product setup and the safe release path.
+Follow the authority hierarchy in [`PROJECT-STATE.md`](./PROJECT-STATE.md#3-authority-hierarchy). In short:
+founder decision, then the authoritative issue, then the Project board, then PR/CI/staging/provider evidence,
+then `PROJECT-STATE.md`, then runbooks, then tool-specific pointers. Chat transcripts and session summaries are
+never authoritative.
 
-Do not rely on a chat transcript or require Mantosh to paste a handoff prompt. If information is missing, record the decision or question in the relevant GitHub issue in plain English.
+Do not rely on a chat transcript or require the founder to paste a handoff prompt. If information is missing,
+record the decision or question in the relevant GitHub issue in plain English.
 
-## Start every task this way
+### Role boundaries
 
-1. Read `README.md`, this file, the assigned GitHub issue, and linked pull requests.
-2. Inspect `git status`, the current branch, open pull requests, GitHub Actions checks, and the PingStep project board.
-3. Confirm no other active pull request owns the same issue or files. One agent owns one issue and one branch at a time.
-4. Give a short update: current state, task goal, plan, risks, and verification.
-5. Move the issue to **In Progress** only when work actually starts.
+- **Founder (Mantosh)** — sole product, scope, priority, spending, and launch authority.
+- **Strategy/review agent** — analyzes, defines tasks, reviews issues/PRs, records founder-approved decisions
+  and review findings. Must not promote its own recommendation to a settled decision.
+- **Implementation agent** — implements the assigned slice, adds tests, reports evidence, surfaces unresolved
+  questions. Must not make product decisions or convert assumptions into policy.
+
+## Start of work
+
+1. Read `PROJECT-STATE.md` completely.
+2. Read this handbook and your tool-specific pointer (e.g. [`CLAUDE.md`](./CLAUDE.md)).
+3. Inspect the authoritative issue, current branch, open pull requests, CI results, `main`, `migrations/`, and
+   the Project board. When the issue has amendment comments, the body **plus every amendment** is the
+   authoritative scope; later amendments supersede earlier generic wording.
+4. Confirm no other agent owns the same issue, branch, migration number, or high-conflict files.
+5. State the exact task boundary and verification plan before editing.
 
 ## Work safely
 
 - Create a branch named `codex/<short-task-name>` or `claude/<short-task-name>`.
 - Keep changes focused on one issue. Do not rebuild working features without a clear reason.
-- Use plain English in issues, PRs, comments, and documentation. Explain why the work matters and what “done” means.
-- Never commit, print, or paste secrets, API keys, OAuth data, Stripe data, customer data, logs, payment details, or personal information.
-- Ask before destructive, paid, legal, account, or customer-impacting actions that are not clearly authorized by the issue.
+- Use plain English in issues, PRs, comments, and documentation.
+- Never commit, print, or paste secrets, API keys, OAuth data, Stripe data, customer data, logs, payment
+  details, or personal information — in code, tests, PRs, or `PROJECT-STATE.md`.
+- Ask before destructive, paid, legal, account, or customer-impacting actions that are not clearly authorized
+  by the issue.
 - Do not deploy production as part of ordinary work.
+- One agent owns one issue and one branch at a time.
 
-## Release rules
+## Quality contract
 
-- Pull requests must pass the quality gate before merge.
-- A merge to `main` automatically deploys only to staging after all checks pass.
-- Staging is `https://pingstep-staging.mantoshk234.workers.dev` and has its own Worker and database. It must never use production routes, production data, or production credentials.
-- Production is `https://pingstep.dev`. Release only through the GitHub workflow **Release PingStep to production**: it rechecks `main`, requires `RELEASE`, and waits for the protected production approval.
-- Do not bypass these controls with direct production deployments.
+Non-negotiable. The PR template enforces the evidence mapping.
+
+1. Every changed behavior has automated evidence at the lowest useful level.
+2. Every applicable acceptance criterion maps to a named test, CI check, staging result, provider result, or
+   documented manual verification.
+3. Every discovered defect receives a regression test before the fix is complete, unless automation is
+   genuinely impossible and the reason is recorded.
+4. Coverage is a guardrail, not proof of correctness. Do not add meaningless tests to raise coverage.
+5. Critical database behavior must not be verified only through in-memory mocks.
+6. A merged PR is not `Done` while staging, provider, migration, or founder evidence remains required.
+7. Flaky tests are defects. Do not normalize rerunning until green.
+8. Tests verify behavior and guarantees rather than private implementation details, where practical.
+9. **Tests must prove the authoritative contract, not redefine it.** A suite that quietly changes the
+   requirement to match the implementation is not valid evidence. For requirements using words such as
+   *automatic*, *bounded*, *idempotent*, *recoverable*, *operator-controlled*, *fail-closed*, *terminal*,
+   *concurrent*, or *retry*, add explicit state-transition tests proving those semantics.
+10. **Promised actions must be reachable through the intended surface.** An internal function that cannot be
+    invoked through the supported API, CLI, UI, workflow, or provider procedure does not satisfy an
+    acceptance criterion. Test from that surface where practical.
+11. **Failure propagation is part of correctness.** For finalization, cleanup, migration, provider,
+    reconciliation, release, or verification flows, prove failures affect the externally observable result.
+    Logging an error while returning success is not acceptable unless the issue defines that failure as
+    non-fatal.
+12. **Implementation summaries are not authoritative evidence.** Before accepting a change, inspect the pushed
+    state: issue, PR head SHA, diff, review comments, CI checks, migrations, and required staging/provider
+    evidence. Do not mark a finding resolved because an agent says it is resolved.
+
+### Risk-based test layers
+
+For each implementation issue, explicitly determine the applicability of: unit/domain; real D1 repository and
+migration; API, authorization, tenant-isolation, and security; browser/UI/accessibility; failure, timeout,
+retry, interruption, recovery, concurrency, and idempotency; feature-flag and production fail-closed; staging
+end-to-end; provider test-mode; rollback and disabled-state; and regression tests for review findings and
+production defects. Record `Not applicable` with a short reason when a layer does not apply.
+
+Authentication, billing, account deletion, exports, quotas, alert delivery, migrations, retention, Queue/R2,
+email delivery, and cross-account access require stronger evidence than copy-only changes. Critical D1 work
+must exercise actual SQL preparation/execution, binding counts, constraints, relevant indexes, migration
+application, and foreign-key-safe cleanup.
+
+### Test efficiency
+
+Keep deterministic fast checks on every PR. Run slower deployed staging/provider tests after staging
+deployment or through controlled workflows. Do not generate high-volume records or paid-provider usage on
+every PR. Reuse the staging isolation and cleanup contract in
+[`docs/staging-e2e-resource-lifecycle.md`](./docs/staging-e2e-resource-lifecycle.md) for staging fixtures.
+Prefer a few high-value behavioral tests over duplicated low-value assertions.
 
 ## Required verification
 
@@ -53,18 +118,37 @@ npm run worker:deploy:dry-run
 npm run worker:deploy:staging:dry-run
 ```
 
-State any check that could not run and why. After a merged change that affects runtime behavior, confirm the staging deployment and perform the relevant staging check before considering it complete.
+`npm test` includes the deterministic governance structure checks
+(`test/governance.test.js`, also runnable alone via `npm run check:governance`). GitHub Actions remains the
+authoritative routine gate; state any check that could not run and why.
 
-## Finish every task this way
+## Release rules
 
-1. Create a pull request with a human-readable title and summary.
-2. Include what changed, why, verification performed, known limitations, and rollout/staging result.
-3. Merge only after required checks pass and the change is safe to merge.
-4. Update the GitHub issue with durable, non-sensitive evidence and close it.
-5. Move its project-board card to **Done** only after the task is genuinely complete.
+- Pull requests must pass the required quality gate before merge.
+- A merge to `main` automatically deploys only to staging after all checks pass.
+- Staging has its own Worker and database and must never use production routes, data, or credentials.
+- Production releases go only through the **Release PingStep to production** workflow, which rechecks `main`,
+  requires the release confirmation input, and waits for the protected production approval.
+- Do not bypass these controls with direct production deployments.
+- After a merged change that affects runtime behavior, confirm the staging deployment and perform the relevant
+  staging check before considering it complete.
 
-## Current known limits
+## End of work
 
-- Use Stripe Test mode on staging for payment experiments. Never copy live Stripe credentials into staging or make real purchases merely for testing.
-- Google sign-in remains deferred until its public OAuth configuration is ready.
-- Email alerts and the shared operations mailbox remain planned work, not implicit requirements for unrelated changes.
+1. Commit and push authorized work, or explicitly report why it remains local and unverifiable.
+2. Update the PR/issue with durable, non-sensitive evidence, including the requirement-to-evidence mapping.
+3. Record incomplete criteria, blockers, manual/provider actions, and the exact next action.
+4. Update `PROJECT-STATE.md` **only** when one of its material state categories changed — not for routine code
+   changes or test reruns.
+5. Leave the repository and branch state unambiguous for the next agent.
+
+Work is not handed off merely because an agent wrote a chat summary. The copyable role-specific closeout
+prompts are in the **AI project continuation** section of [`README.md`](./README.md).
+
+### `PROJECT-STATE.md` write ownership
+
+The implementation agent records factual evidence in its issue/PR first. The strategy/review agent
+consolidates material project state into `PROJECT-STATE.md`, and may open a small dedicated branch/PR for that
+file. It must not push into an implementation branch unless ownership is explicitly transferred. Avoid
+competing simultaneous state updates for the same transition; while an implementation PR is active, prefer
+recording transient facts in that PR and consolidating after review or merge.
