@@ -66,8 +66,37 @@ governance structure checks), `test:coverage`, `test:e2e`, `worker:check`, `work
 - **Remaining manual or provider actions:**
 - **Exact next action:**
 
+## Merge authority
+
+`main` is the **production boundary**. These rules are permanent, apply to **every** AI role — strategy/review
+agents (e.g. ChatGPT) and implementation agents (e.g. Claude/Codex) alike — and hold under the current identity
+model and any future one.
+
+- AI agents **may** create issues, branches, commits, pull requests, comments, reviews, tests, and evidence.
+- **No AI agent may** merge **into `main`**, push/commit/edit/update `main` directly, **enable or queue
+  auto-merge into `main`**, or use administrator, branch-protection, ruleset, API, CLI, credential, or any
+  other bypass capability to update `main` or merge into `main`.
+- **Every AI-created change targeting `main` must end at an open, review-ready PR.** After it is review-clean
+  and all required evidence is complete, AI agents stop and hand it to the founder.
+- **Only the founder performs the final Merge action into `main`.** A tool or API being capable of merging does
+  not grant an AI agent production authority.
+- **A "review-clean" verdict is quality evidence, not production authorization.** No approving review is
+  required on `main` today (required approving reviews = 0) because PRs are authored under the founder's own
+  identity and GitHub forbids self-approval — a **current** condition, not a permanent rule.
+  **The founder's Merge action is the final authorization.**
+
+*Current operating mode:* no long-lived integration branch with delegated AI merge authority exists yet, so AI
+merges nowhere today. [#197](https://github.com/mantoshkumar1/pingstep/issues/197) may later grant bounded AI
+merge authority for pull requests into `staging`; it can never extend to `main`.
+
 ## Merge guidance
 
-State one of: **safe to merge after green CI**, **needs manual product review**, or **do not merge yet**, and
+State one of: **ready for founder merge after green CI**, **needs manual product review**, or **do not merge yet**, and
 explain why. A merged PR is not `Done` while required staging, provider, migration, or founder evidence is
 still outstanding.
+
+- **Permanent:** a pull request targeting `main` always stops for the founder. Even when review-clean, no AI
+  agent merges it — the founder performs that merge.
+- **Current operating mode:** today *every* pull request stops for the founder, because no delegated
+  integration authority exists yet. [#197](https://github.com/mantoshkumar1/pingstep/issues/197) may later
+  allow bounded AI merges into `staging`; until it is implemented and founder-approved, assume none.
